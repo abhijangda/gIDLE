@@ -1,0 +1,9 @@
+<name>gIDLE</name>
+<type>C Project</type><file>/media/sda11/C/GTK+/gIDLE/main.c</file><file>/media/sda11/C/GTK+/gIDLE/options.c</file><file>/media/sda11/C/GTK+/gIDLE/menus.h</file><file>/media/sda11/C/GTK+/gIDLE/newprojectwin.c</file><file>/media/sda11/C/GTK+/gIDLE/proj_manager.c</file><file>/media/sda11/C/GTK+/gIDLE/class_brower.c</file><file>/media/sda11/C/GTK+/gIDLE/key_press_event.h</file><file>/media/sda11/C/GTK+/gIDLE/path_browser.c</file><file>/media/sda11/C/GTK+/gIDLE/codewidget.c</file><file>/media/sda11/C/GTK+/gIDLE/codewidget.h</file>
+
+<file>/media/sda11/C/GTK+/gIDLE/string_stack.c</file>
+<file>/media/sda11/C/GTK+/gIDLE/string_stack.h</file>
+<file>/media/sda11/C/GTK+/gIDLE/pyclass.c</file>
+<file>/media/sda11/C/GTK+/gIDLE/pyclass.h</file>
+<file>/media/sda11/C/GTK+/gIDLE/pymodule.c</file>
+<file>/media/sda11/C/GTK+/gIDLE/pymodule.h</file>
