@@ -1,0 +1,17 @@
+<name>Python Shell</name>
+<type>C Project</type>
+<path>/media/sda11/C/GTK+/gIDLE</path>
+<file>/media/sda11/C/GTK+/gIDLE/src/main_shell.c</file>
+<file>/media/sda11/C/GTK+/gIDLE/src/menus_shell.h</file>
+<compile_only>False</compile_only>
+<disable_inline>False</disable_inline>
+<define_symbols>False</define_symbols>
+<symbols>thon Shell</name>
+<add_dir>False</add_dir>
+<warning_as_errors>False</warning_as_errors>
+<support_c89>False</support_c89>
+<compile_assemble>False</compile_assemble>
+<optimize>False</optimize>
+<optimize_level>0</optimize_level>
+<run_on_ext_console>False</run_on_ext_console>
+<out_dir>thon Shell</name>
