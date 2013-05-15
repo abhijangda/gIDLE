@@ -1,7 +1,7 @@
 gIDLE
 =====
 gIDLE is an Integerated Development Environment for Python. This IDE has all the advanced feature yet easy-to-use. 
-It is written in C and Python using GTK+ 2 and POSIX API, so it is very fast. Features:
+It is written in C and Python using GTK+ 3 and POSIX API, so it is very fast. Features:
 
 1. Syntax Highlighting, Line Numbers, Auto Indent
 
@@ -14,8 +14,8 @@ It is written in C and Python using GTK+ 2 and POSIX API, so it is very fast. Fe
 5. A Linux Terminal
 and many other.
 
-Currently the code for gIDLE is being completely re-written as the current is sluggish, hard to read and buggy. The new
-gIDLE is being written in GTK+ 3. The code will be uploaded shortly.
+Currently gIDLE3 is in development. Although, it can be used for editing purposes just like gedit, but not as full IDE. 
+Old gIDLE2 code could be accessed in the directory gIDLE2.
 
 Compiling
 =====
