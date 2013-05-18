@@ -17,6 +17,8 @@ struct _codewidget
     GtkWidget *sourceview;
     GtkWidget *class_combobox;
     GtkWidget *func_combobox;
+    GtkWidget *line_num_widget; //For Line Numbers
+    GtkWidget *hbox_scroll_line; //HBox for drawing area and scrollwin
     GtkSourceBuffer *sourcebuffer;
     char *file_path;
     int file_mode;
@@ -25,6 +27,7 @@ struct _codewidget
     int prev_line;
     PyClass **py_class_array;
     int py_class_array_size;
+    int drawing_area_width;
     gulong combo_class_changed_handler_id;
     gulong combo_func_changed_handler_id;
     gulong buffer_mark_set_handler_id;

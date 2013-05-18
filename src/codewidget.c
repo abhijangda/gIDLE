@@ -22,6 +22,13 @@ static void
 codewidget_delete_range (GtkTextBuffer *buffer, GtkTextIter *start,
                        GtkTextIter *end, gpointer data);
 
+static void
+codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
+                             gpointer data);
+
+static void
+codewidget_draw (GtkWidget *widget, cairo_t *cr, gpointer data);
+
 static gboolean can_combo_func_activate = TRUE;
 static gboolean can_combo_class_activate = TRUE;
 
@@ -108,18 +115,38 @@ codewidget_new ()
     codewidget->sourceview = gtk_source_view_new_with_buffer (codewidget->sourcebuffer);
 
     g_signal_connect (G_OBJECT (codewidget->sourceview), "key-press-event",
-                     G_CALLBACK (codewidget_key_press), NULL);
+                     G_CALLBACK (codewidget_key_press), NULL); 
+    
+    g_signal_connect_after (G_OBJECT (codewidget->sourceview), "draw",
+                     G_CALLBACK (codewidget_draw), codewidget);
                     
     GtkSourceLanguageManager *languagemanager = gtk_source_language_manager_new();
     GtkSourceLanguage *language = gtk_source_language_manager_guess_language(languagemanager,"file.py",NULL);
     gtk_source_buffer_set_language(codewidget->sourcebuffer,language);
     
+    codewidget->line_num_widget = gtk_drawing_area_new (); 
+
+    g_signal_connect (G_OBJECT (codewidget->line_num_widget), "draw",
+                     G_CALLBACK (codewidget_line_num_widget_draw), codewidget);
+
+    gtk_widget_set_size_request (codewidget->line_num_widget,
+                                 10, 100);
+    
+    codewidget->hbox_scroll_line = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
+
     gtk_box_pack_start (GTK_BOX (codewidget->vbox), codewidget->hbox,
                                        FALSE, FALSE, 2);
-    gtk_box_pack_start (GTK_BOX (codewidget->vbox), codewidget->scrollwin,
+    gtk_box_pack_start (GTK_BOX (codewidget->vbox), codewidget->hbox_scroll_line,
                                        TRUE, TRUE, 2);
+
+    gtk_box_pack_start (GTK_BOX (codewidget->hbox_scroll_line),
+                       codewidget->line_num_widget, FALSE, FALSE, 2);
+    gtk_box_pack_start (GTK_BOX (codewidget->hbox_scroll_line), codewidget->scrollwin,
+                                       TRUE, TRUE, 2);
+    
     gtk_container_add (GTK_CONTAINER (codewidget->scrollwin),
                                      codewidget->sourceview);
+
     gtk_box_pack_start (GTK_BOX (codewidget->hbox), codewidget->class_combobox,
                                        FALSE, FALSE, 2);
     gtk_box_pack_start (GTK_BOX (codewidget->hbox), codewidget->func_combobox,
@@ -138,8 +165,7 @@ codewidget_new ()
     codewidget_add_class (codewidget, py_class);
     
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (codewidget->class_combobox),
-                                           py_class->name);
-    
+                                           py_class->name);    
     return codewidget;
 }
 
@@ -172,6 +198,77 @@ codewidget_destroy (CodeWidget * code_widget)
     g_free (code_widget);    
 }
 
+/*Signal Handler for line_num_widget
+ * draw signal
+ */
+static void
+codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
+                             gpointer data)
+{
+    CodeWidget *codewidget = (CodeWidget *)data;
+    
+    if (!show_line_numbers)
+         return;
+    
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (codewidget->sourcebuffer);
+    GdkRectangle location;
+    GtkTextIter rect_start_iter, rect_end_iter, current_iter;
+    int i, last_line;
+    cairo_text_extents_t text_extents;
+    gchar *line_str;
+
+    gtk_text_buffer_get_iter_at_mark (buffer, &current_iter,
+                                     gtk_text_buffer_get_insert (buffer));
+
+    cairo_set_source_rgb (cr, 0, 0, 0);
+    cairo_set_line_width (cr, 1);
+    cairo_set_font_size (cr, 14);
+
+    gtk_text_view_get_visible_rect (GTK_TEXT_VIEW (codewidget->sourceview),
+                                   &location);
+    gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (codewidget->sourceview),
+                                       &rect_start_iter, location.x,location.y);
+    gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (codewidget->sourceview),
+                                       &rect_end_iter, location.x + location.width, 
+                                       location.y + location.height);
+
+    if (gtk_text_iter_get_line (&rect_end_iter) < gtk_text_buffer_get_line_count (buffer))
+         last_line = gtk_text_iter_get_line (&rect_end_iter);
+    else
+         last_line = gtk_text_buffer_get_line_count (buffer);
+
+    for (i = gtk_text_iter_get_line (&rect_start_iter); i <= last_line; i++)
+    {        
+        GtkTextIter iter;
+        GdkRectangle loc2;
+        int window_x, window_y;
+        
+        gtk_text_buffer_get_iter_at_line (buffer, &iter, i);
+        gtk_text_view_get_iter_location (GTK_TEXT_VIEW (codewidget->sourceview),
+                                        &iter, &loc2);
+        gtk_text_view_buffer_to_window_coords (GTK_TEXT_VIEW (codewidget->sourceview),
+                                              GTK_TEXT_WINDOW_WIDGET, loc2.x,
+                                              loc2.y, &window_x, &window_y);
+
+        if (i == gtk_text_iter_get_line (&current_iter))
+            cairo_select_font_face (cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL,
+                                   CAIRO_FONT_WEIGHT_BOLD);
+        else
+            cairo_select_font_face (cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL,
+                                   CAIRO_FONT_WEIGHT_NORMAL);
+
+        cairo_move_to (cr, 0, window_y + 15);
+        line_str = g_strdup_printf ("%d", i+1);
+        cairo_show_text (cr, line_str);
+        g_free (line_str);
+    }
+    line_str = g_strdup_printf ("%d", i);
+    cairo_text_extents (cr, line_str, &text_extents);
+    g_free (line_str);
+    gtk_widget_set_size_request (codewidget->line_num_widget,
+                                text_extents.width + 5, 100);
+}
+
 /* Signal Handler for
  * emitted "mark-set" signal
  */
@@ -182,18 +279,19 @@ codewidget_mark_set (GtkTextBuffer *buffer, GtkTextIter *iter, GtkTextMark *mark
     gtk_text_buffer_get_iter_at_mark (buffer, &current_iter, gtk_text_buffer_get_insert (buffer));
 
     int chars = gtk_text_iter_get_offset (&current_iter);
-    int col = gtk_text_iter_get_line_offset (&current_iter);;
-    int line = gtk_text_iter_get_line (&current_iter);;
+    int col = gtk_text_iter_get_line_offset (&current_iter);
+    int line = gtk_text_iter_get_line (&current_iter);
     int first_line = -1, last_line = -1;
 
     gchar *status_bar_msg;
-    asprintf (&status_bar_msg, "Chars %d Col %d Line %d", chars, col, line);
+    asprintf (&status_bar_msg, "Chars %d Col %d Line %d", chars+1, col+1, line+1);
     gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, status_bar_msg);
 
     CodeWidget *codewidget = (CodeWidget *)data;
 
     if (line != codewidget->prev_line)
     {
+        //printf ("line %d\n", line);
         int func, class;
         line_history_push (codewidget->line_history, line);
         for (class =  codewidget->py_class_array_size -1; class >= 0 &&
@@ -234,15 +332,23 @@ codewidget_mark_set (GtkTextBuffer *buffer, GtkTextIter *iter, GtkTextMark *mark
                     gtk_combo_box_set_active (GTK_COMBO_BOX (codewidget->func_combobox), -1);
                 }
             }
-
-           while (gtk_events_pending ())
-                gtk_main_iteration_do (FALSE);
-
             can_combo_func_activate = TRUE;
             can_combo_class_activate = TRUE;
         }
     }
     codewidget->prev_line = line;
+}
+
+/* Handler for SourceView
+ * draw signal
+ */
+static void
+codewidget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
+{
+    CodeWidget *codewidget = (CodeWidget *)data;
+    if (gtk_widget_get_window (codewidget->line_num_widget))
+        gdk_window_invalidate_rect (gtk_widget_get_window (codewidget->line_num_widget), NULL,
+                                   FALSE);
 }
 
 /*Handler for TextBuffer

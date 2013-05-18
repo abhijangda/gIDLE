@@ -283,6 +283,7 @@ main (int argc, char *argv [])
     mode = GIDLE_MODE_FILE;
     is_code_completion = TRUE;
     is_code_folding = TRUE;
+    show_line_numbers = TRUE;
     /*************/
     gtk_window_maximize (GTK_WINDOW (window));
     gtk_widget_show_all (GTK_WIDGET (window));

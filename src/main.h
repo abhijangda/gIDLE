@@ -31,6 +31,7 @@ int tab_width;
 char *tab_width_str;
 gboolean is_code_completion;
 gboolean is_code_folding;
+gboolean show_line_numbers;
 /*************/
 
 /**Bookmark related**/
