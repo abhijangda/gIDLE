@@ -23,8 +23,11 @@ struct _codewidget
     int line_history [5];
     int line_history_current_index;
     int prev_line;
-    PyClass *py_class_array;
+    PyClass **py_class_array;
     int py_class_array_size;
+    gulong combo_class_changed_handler_id;
+    gulong combo_func_changed_handler_id;
+    gulong buffer_mark_set_handler_id;
 };
 
 typedef struct _codewidget CodeWidget;

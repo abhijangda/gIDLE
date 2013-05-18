@@ -9,6 +9,7 @@ struct _py_func
     gchar *name;
     gchar **argv; //NULL terminated array
     int pos;
+    int indentation;
 };
 
 typedef struct _py_func PyFunc;
@@ -27,6 +28,9 @@ py_func_get_definition (PyFunc *py_func);
 
 PyFunc *
 py_func_dup (PyFunc *py_func);
+
+void
+py_funcv_append (PyFunc ***py_funcv, PyFunc *);
 
 PyFunc **
 py_func_dupv (PyFunc **__py_func);

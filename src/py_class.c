@@ -30,16 +30,20 @@ py_class_new_from_def (gchar *def_string, int pos,  int indentation)
     
     class += strlen ("class");
     gchar *open_bracket = g_strstr_len (def_string, -1, "(");
-    
+    if (!open_bracket)
+        open_bracket = &def_string [strlen (def_string) - 1];
+
     //Copying only func_name
-    gchar *name = g_malloc0 (sizeof (gchar) *(open_bracket - class));
+    int len = strlen (class) - strlen (open_bracket);
+
+    gchar *name = g_malloc0 (sizeof (gchar) * len);
     gchar *n = name;
     gchar *i = class-1;
-    while (++i < open_bracket)
+    while (++i != open_bracket)
          *n++ = *i;
 
     g_strstrip (name);
-
+    
     //Stripping arguments and remove brackets
     gchar **base_classv = g_strsplit (open_bracket, ",", 0); 
     gchar **p = base_classv;

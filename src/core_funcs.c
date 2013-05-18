@@ -78,6 +78,18 @@ go_to_line (GtkTextView *view, int line)
     gtk_text_view_scroll_to_iter (view, &start_iter, 0.1, FALSE, 0.5, 0.5);
 }
 
+/*To move cursor to position
+ * and select that line
+*/
+void
+go_to_pos_and_select_line (GtkTextView *view, int pos)
+{
+    GtkTextIter iter;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer (view);
+    gtk_text_buffer_get_iter_at_offset (buffer, &iter, pos);
+    go_to_line (view, gtk_text_iter_get_line (&iter));
+}
+
 /* To find
  * next
  */

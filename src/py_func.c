@@ -13,6 +13,7 @@ py_func_new (gchar *name, gchar **argv, int pos, int indentation)
     py_func->argv = g_strdupv (argv);
     py_func->pos = pos;
     py_func->indentation = indentation;
+    return py_func;
 }
 
 /*Create a new
@@ -33,7 +34,7 @@ py_func_new_from_def (gchar *def_string, int pos, int indentation)
     gchar *name = g_malloc0 (sizeof (gchar) *(open_bracket - func));
     gchar *n = name;
     gchar *i = func-1;
-    while (++i < open_bracket)
+    while (++i != open_bracket)
          *n++ = *i;
 
     g_strstrip (name);
@@ -102,6 +103,29 @@ py_func_dupv (PyFunc **__py_funcv)
     }
     py_funcv [size-1] = NULL;
     return py_funcv;
+}
+
+/* Add PyFunc to PyFunc Array
+ * this function ensures that py_funcv will be NULL terminated
+*/
+void
+py_funcv_append (PyFunc ***py_funcv, PyFunc *py_func)
+{
+    int size = -1;
+    
+    if (!(*py_funcv))
+    {
+        size = 1;
+        (*py_funcv) = g_malloc (2*sizeof (PyFunc *));
+    }
+    else
+    {
+        /*Get size of py_funcv excluding NULL*/
+        while ((*py_funcv) [++size]);
+        (*py_funcv) = g_realloc (*py_funcv, (++size+1)*sizeof (PyFunc *));
+    }
+    (*py_funcv) [size - 1] = py_func;
+    (*py_funcv) [size] = NULL;
 }
 
 /*Destroy 

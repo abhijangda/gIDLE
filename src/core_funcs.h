@@ -52,6 +52,9 @@ void
 go_to_line (GtkTextView *view, int line);
 
 void
+go_to_pos_and_select_line (GtkTextView *view, int pos);
+
+void
 show_error_message_dialog (gchar *message);
 
 void
