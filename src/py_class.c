@@ -6,7 +6,8 @@
  *
 */
 PyClass *
-py_class_new (gchar *name, gchar **base_class_names, PyClass **base_classes, PyFunc **func_array, int pos, int indentation)
+py_class_new (gchar *name, gchar **base_class_names, PyClass **base_classes,
+             PyFunc **func_array, gdouble pos, int indentation)
 {
     PyClass *py_class = g_malloc (sizeof (PyClass));
     py_class->name = g_strdup (name);
@@ -22,7 +23,7 @@ py_class_new (gchar *name, gchar **base_class_names, PyClass **base_classes, PyF
  * from definition
  */
 PyClass *
-py_class_new_from_def (gchar *def_string, int pos,  int indentation)
+py_class_new_from_def (gchar *def_string, gdouble pos,  int indentation)
 {
     gchar *class = g_strstr_len (def_string, -1, "class");
     if (!class)

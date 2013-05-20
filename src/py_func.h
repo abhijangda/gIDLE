@@ -8,20 +8,20 @@ struct _py_func
 {
     gchar *name;
     gchar **argv; //NULL terminated array
-    int pos;
+    gdouble pos;
     int indentation;
 };
 
 typedef struct _py_func PyFunc;
 
 PyFunc *
-py_func_new (gchar *name, gchar **argv, int pos, int indentation);
+py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation);
 
 void
 py_func_destroy (PyFunc *py_func);
 
 PyFunc *
-py_func_new_from_def (gchar *def_string, int pos, int indentation);
+py_func_new_from_def (gchar *def_string, gdouble pos, int indentation);
 
 gchar *
 py_func_get_definition (PyFunc *py_func);

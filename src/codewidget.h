@@ -1,4 +1,6 @@
 #include "py_class.h"
+#include "code_folding_widget.h"
+
 #include <gtk/gtk.h>
 #include <gtksourceview/gtksourceview.h>
 #include <gtksourceview/gtksourcelanguagemanager.h>
@@ -18,8 +20,10 @@ struct _codewidget
     GtkWidget *class_combobox;
     GtkWidget *func_combobox;
     GtkWidget *line_num_widget; //For Line Numbers
-    GtkWidget *hbox_scroll_line; //HBox for drawing area and scrollwin
+    GtkWidget *hbox_scroll_line; //HBox for line_num_widget, code_folding_widget and scrollwin
+    GtkTextTag *invisible_tag;
     GtkSourceBuffer *sourcebuffer;
+    CodeFoldingWidget *code_folding_widget;
     char *file_path;
     int file_mode;
     int line_history [5];

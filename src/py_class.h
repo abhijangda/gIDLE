@@ -9,17 +9,17 @@ struct _py_class
     gchar **base_class_names;
     struct _py_class **base_classes;
     PyFunc **py_func_array;
-    int pos;
+    gdouble pos;
     int indentation;
 };
 
 typedef struct _py_class PyClass;
 
 PyClass *
-py_class_new (gchar *name, gchar **base_class_name, PyClass **base_classes, PyFunc **func_array, int pos, int indentation);
+py_class_new (gchar *name, gchar **base_class_name, PyClass **base_classes, PyFunc **func_array, gdouble pos, int indentation);
 
 PyClass *
-py_class_new_from_def (gchar *def, int pos, int indentation);
+py_class_new_from_def (gchar *def, gdouble pos, int indentation);
 
 void
 py_class_destroy (PyClass *py_class);

@@ -405,28 +405,241 @@ edit_delete_activate (GtkWidget *widget)
     gtk_text_buffer_delete_selection (buffer, TRUE, TRUE);
 }
 
+/* To select the current function
+ * in which the cursor is located
+ */
 void
 edit_select_function_activate (GtkWidget *widget) 
 {
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+    int func = gtk_combo_box_get_active (GTK_COMBO_BOX (code_widget_array [get_current_index ()]->func_combobox));
+
+    if (func == -1)
+        return;
+
+    int class = gtk_combo_box_get_active (GTK_COMBO_BOX (code_widget_array [get_current_index ()]->class_combobox));
+    gdouble start_pos = code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func]->pos;
+    gdouble end_pos;
+    GtkTextIter start_iter, end_iter;
+
+    if (code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func+1] != NULL)
+        end_pos = code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func+1]->pos;
+    else if (class + 1 != code_widget_array [get_current_index ()]->py_class_array_size)
+        end_pos = code_widget_array [get_current_index ()]->py_class_array [class+1]->pos;
+    else
+        end_pos = gtk_text_buffer_get_char_count (buffer);
+    
+    end_pos--;
+    
+    gtk_text_buffer_get_iter_at_offset (buffer, &start_iter, start_pos);
+    gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, end_pos);
+    gtk_text_buffer_select_range (buffer, &start_iter, &end_iter);
 }
 
+/*To select the current block
+ * in which cursor is located
+ */
 void
 edit_select_block_activate (GtkWidget *widget)
 {
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+    GtkTextIter current_iter, start_iter, end_iter;
+    gtk_text_buffer_get_iter_at_mark (buffer, &current_iter, gtk_text_buffer_get_insert (buffer));
+    int line;
+    int start_line = gtk_text_iter_get_line (&current_iter);
+    
+    for (line = start_line; line >=0; line--)
+    {
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line);
+        if (strrchr (text, ':'))
+            /*Found the block's start*/
+            break;
+    }
+    if (line == -1)
+    {
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0,
+                            "Cannot Block's Start");
+        return;
+    }
+    
+    gtk_text_buffer_get_iter_at_line (buffer, &start_iter, line);
+
+    for (line = start_line; line < gtk_text_buffer_get_line_count (buffer);
+        line ++)
+    {
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line);
+        if (strrchr (text, ':'))
+            /*Found the block's end*/
+            break;
+    }
+    if (line == gtk_text_buffer_get_line_count (buffer))
+    {
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0,
+                           "Cannot Block's End");
+        return;
+    }
+    gtk_text_buffer_get_iter_at_line (buffer, &end_iter, line);
+    gtk_text_buffer_select_range (buffer, &start_iter, &end_iter);
 }
 
+/*To fold all
+ * functions
+ */
 void
 edit_fold_all_func_activate (GtkWidget *widget)
 {
+    int i;
+    CodeFoldingWidget *code_folding_widget = code_widget_array [get_current_index ()]->code_folding_widget;
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+
+    for (i = 0; i < code_widget_array [get_current_index ()]->py_class_array_size; i++)
+    {
+        PyFunc **p = code_widget_array [get_current_index ()]->py_class_array [i]->py_func_array;
+        
+        if (!p)
+             continue;
+        
+        while (*p)
+        {
+            GtkTextIter start_iter, end_iter;
+
+            /*Get block starting information*/
+            gtk_text_buffer_get_iter_at_offset (buffer, &start_iter, (*p)->pos);
+            gtk_text_buffer_get_iter_at_line (buffer, &start_iter,
+                                             gtk_text_iter_get_line (&start_iter)+1);
+
+            /*Get block ending information*/
+            if (*(p+1))
+                gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, (*(p+1))->pos);
+             else if (i + 1 != code_widget_array [get_current_index ()]->py_class_array_size)
+                gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, 
+                                                    code_widget_array [get_current_index ()]->py_class_array [i + 1]->pos);
+            else
+                gtk_text_buffer_get_end_iter (buffer, &end_iter);
+
+            gtk_text_buffer_get_iter_at_line (buffer, &end_iter, gtk_text_iter_get_line (&end_iter) - 1);
+            
+            /*Function is already folded do nothing*/
+            if (code_folding_widget_invisible_text_info_exists (code_folding_widget,
+                                                               gtk_text_iter_get_line (&start_iter),
+                                                               gtk_text_iter_get_line (&end_iter))
+               == -1)
+            {
+                code_folding_widget_append_to_invisible_text_info_array (code_folding_widget,
+                                                                                              gtk_text_iter_get_line (&start_iter),
+                                                                                              gtk_text_iter_get_line (&end_iter));
+                gtk_text_buffer_apply_tag (buffer,
+                                          code_widget_array [get_current_index ()]->invisible_tag,
+                                          &start_iter, &end_iter);
+            }
+            
+            p++;
+        }
+    }
 }
 
+/* To unfold all
+ * functions
+ */
 void
 edit_unfold_all_func_activate (GtkWidget *widget)
 {
+    int i;
+    CodeFoldingWidget *code_folding_widget = code_widget_array [get_current_index ()]->code_folding_widget;
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+
+    for (i = 0; i < code_widget_array [get_current_index ()]->py_class_array_size; i++)
+    {
+        PyFunc **p = code_widget_array [get_current_index ()]->py_class_array [i]->py_func_array;
+        
+        if (!p)
+             continue;
+        
+        while (*p)
+        {
+            GtkTextIter start_iter, end_iter;
+
+            /*Get block starting information*/
+            gtk_text_buffer_get_iter_at_offset (buffer, &start_iter, (*p)->pos);
+            gtk_text_buffer_get_iter_at_line (buffer, &start_iter,
+                                             gtk_text_iter_get_line (&start_iter)+1);
+
+            /*Get block ending information*/
+            if (*(p+1))
+                gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, (*(p+1))->pos);
+             else if (i + 1 != code_widget_array [get_current_index ()]->py_class_array_size)
+                gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, 
+                                                    code_widget_array [get_current_index ()]->py_class_array [i + 1]->pos);
+            else
+                gtk_text_buffer_get_end_iter (buffer, &end_iter);
+
+            gtk_text_buffer_get_iter_at_line (buffer, &end_iter, gtk_text_iter_get_line (&end_iter) - 1);
+            
+            /*Function is already unfolded do nothing*/
+            int j;
+            if (( j = code_folding_widget_invisible_text_info_exists (code_folding_widget,
+                                                               gtk_text_iter_get_line (&start_iter),
+                                                               gtk_text_iter_get_line (&end_iter)))
+               != -1)
+            {
+                code_folding_widget_invisible_text_info_array_remove (code_folding_widget, j);
+                gtk_text_buffer_remove_tag (buffer,
+                                          code_widget_array [get_current_index ()]->invisible_tag,
+                                          &start_iter, &end_iter);
+            }
+            
+            p++;
+        }
+    }
 }
+
+/*To fold current
+ * function
+ */
 void
 edit_fold_current_func_activate (GtkWidget *widget)
 {
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+    int func = gtk_combo_box_get_active (GTK_COMBO_BOX (code_widget_array [get_current_index ()]->func_combobox));
+
+    if (func == -1)
+        return;
+    
+    CodeFoldingWidget *code_folding_widget = code_widget_array [get_current_index ()]->code_folding_widget;
+    GtkTextIter start_iter, end_iter;
+    int class = gtk_combo_box_get_active (GTK_COMBO_BOX (code_widget_array [get_current_index ()]->class_combobox));
+    gdouble end_pos;
+
+    gtk_text_buffer_get_iter_at_offset (buffer, &start_iter,
+                                       code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func]->pos);
+    gtk_text_buffer_get_iter_at_line (buffer, &start_iter,
+                                             gtk_text_iter_get_line (&start_iter)+1);
+
+    if (code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func+1] != NULL)
+        gtk_text_buffer_get_iter_at_offset (buffer, &end_iter,
+                                           code_widget_array [get_current_index ()]->py_class_array [class]->py_func_array [func+1]->pos);
+    else if (class + 1 != code_widget_array [get_current_index ()]->py_class_array_size)
+        gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, 
+                                           code_widget_array [get_current_index ()]->py_class_array [class+1]->pos);
+    else
+       gtk_text_buffer_get_iter_at_offset (buffer, &end_iter,
+                                           gtk_text_buffer_get_char_count (buffer) -1);
+
+    gtk_text_buffer_get_iter_at_line (buffer, &end_iter, gtk_text_iter_get_line (&end_iter) - 1);
+
+     /*Function is already folded do nothing*/
+    if (code_folding_widget_invisible_text_info_exists (code_folding_widget,
+                                                       gtk_text_iter_get_line (&start_iter),
+                                                       gtk_text_iter_get_line (&end_iter))
+       == -1)
+    {
+        code_folding_widget_append_to_invisible_text_info_array (code_folding_widget,
+                                                                                      gtk_text_iter_get_line (&start_iter),
+                                                                                      gtk_text_iter_get_line (&end_iter));
+        gtk_text_buffer_apply_tag (buffer,
+                                  code_widget_array [get_current_index ()]->invisible_tag,
+                                  &start_iter, &end_iter);
+    }
 }
 
 void
@@ -434,6 +647,9 @@ edit_autocomplete_activate (GtkWidget *widget)
 {
 }
 
+/* To get matching 
+ * paranthesis
+ */
 void
 edit_matching_paranthesis_activate (GtkWidget *widget)
 {

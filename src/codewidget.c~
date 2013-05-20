@@ -100,8 +100,6 @@ codewidget_new ()
                      G_CALLBACK (codewidget_func_combo_changed), codewidget);
 
     codewidget->sourcebuffer = gtk_source_buffer_new (NULL);
-    codewidget->invisible_tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (codewidget->sourcebuffer),
-                                                           NULL, "invisible", TRUE, NULL);
     codewidget->py_class_array = NULL;
 
     codewidget->buffer_mark_set_handler_id = 
@@ -127,27 +125,14 @@ codewidget_new ()
     gtk_source_buffer_set_language(codewidget->sourcebuffer,language);
     
     codewidget->line_num_widget = gtk_drawing_area_new (); 
-    
+
     g_signal_connect (G_OBJECT (codewidget->line_num_widget), "draw",
                      G_CALLBACK (codewidget_line_num_widget_draw), codewidget);
 
     gtk_widget_set_size_request (codewidget->line_num_widget,
                                  10, 100);
     
-    codewidget->code_folding_widget = code_folding_widget_new ();
-
-    g_signal_connect (G_OBJECT (codewidget->code_folding_widget->drawing_area),
-                     "draw", G_CALLBACK (code_folding_widget_draw),
-                     codewidget);
-    
-    g_signal_connect (G_OBJECT (codewidget->code_folding_widget->drawing_area),
-                     "button-press-event", G_CALLBACK (code_folding_button_press),
-                     codewidget);
-
-    gtk_widget_set_size_request (codewidget->code_folding_widget->drawing_area,
-                                 10, 100);
-
-    codewidget->hbox_scroll_line = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+    codewidget->hbox_scroll_line = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
 
     gtk_box_pack_start (GTK_BOX (codewidget->vbox), codewidget->hbox,
                                        FALSE, FALSE, 2);
@@ -155,9 +140,7 @@ codewidget_new ()
                                        TRUE, TRUE, 2);
 
     gtk_box_pack_start (GTK_BOX (codewidget->hbox_scroll_line),
-                       codewidget->line_num_widget, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (codewidget->hbox_scroll_line),
-                       codewidget->code_folding_widget->drawing_area, FALSE, FALSE, 0);
+                       codewidget->line_num_widget, FALSE, FALSE, 2);
     gtk_box_pack_start (GTK_BOX (codewidget->hbox_scroll_line), codewidget->scrollwin,
                                        TRUE, TRUE, 2);
     
@@ -275,24 +258,9 @@ codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
                                    CAIRO_FONT_WEIGHT_NORMAL);
 
         cairo_move_to (cr, 0, window_y + 15);
-        /*Find if i lies in any folded text*/
-        int j;
-        for (j = 0; j < codewidget->code_folding_widget->invisible_text_info_array_size; j++)
-        {
-            if (codewidget->code_folding_widget->invisible_text_info_array [j]->start_line
-               == i)
-            {
-                /*If yes, then display "..."*/
-                line_str = g_strdup_printf ("...");
-                i = codewidget->code_folding_widget->invisible_text_info_array [j]->end_line;
-                break;
-            }
-        }
-        if (j == codewidget->code_folding_widget->invisible_text_info_array_size)
-            line_str = g_strdup_printf ("%d", i+1);
-
+        line_str = g_strdup_printf ("%d", i+1);
         cairo_show_text (cr, line_str);
-        g_free (line_str);        
+        g_free (line_str);
     }
     line_str = g_strdup_printf ("%d", i);
     cairo_text_extents (cr, line_str, &text_extents);
@@ -381,9 +349,6 @@ codewidget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
     if (gtk_widget_get_window (codewidget->line_num_widget))
         gdk_window_invalidate_rect (gtk_widget_get_window (codewidget->line_num_widget), NULL,
                                    FALSE);
-    if (gtk_widget_get_window (codewidget->code_folding_widget->drawing_area))
-        gdk_window_invalidate_rect (gtk_widget_get_window (codewidget->code_folding_widget->drawing_area),
-                                   NULL, FALSE);
 }
 
 /*Handler for TextBuffer

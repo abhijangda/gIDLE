@@ -6,7 +6,7 @@
  * PyFunc
  */
 PyFunc *
-py_func_new (gchar *name, gchar **argv, int pos, int indentation)
+py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation)
 {
     PyFunc *py_func = g_malloc (sizeof (PyFunc));
     py_func->name = g_strdup (name);
@@ -21,7 +21,7 @@ py_func_new (gchar *name, gchar **argv, int pos, int indentation)
  * def_string must contain keyword def with a space
  */
 PyFunc *
-py_func_new_from_def (gchar *def_string, int pos, int indentation)
+py_func_new_from_def (gchar *def_string, gdouble pos, int indentation)
 {
     gchar *func = g_strstr_len (def_string, -1, "def");
     if (!func)
