@@ -314,13 +314,13 @@ code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
                                                               gtk_text_iter_get_offset (&end_line_iter),
                                                               end_line_rect);
             }
-            else if ((*p)->pos > last_line_pos)
-                break;
+            //else if ((*p)->pos > last_line_pos)
+            //    break;
 
             ++p;
         }
-        if (*p)
-            break;
+        //if (*p)
+           // break;
     }
 
     for (i = 0; i < code_folding_widget->block_info_array_size; i++)

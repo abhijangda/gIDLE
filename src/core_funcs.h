@@ -33,8 +33,17 @@ add_new_code_widget ();
 gboolean
 is_file_modified ();
 
+int
+str_count_str (gchar *str1, gchar *str2);
+
 void
 gtk_text_buffer_get_line_end_iter (GtkTextBuffer *buffer, GtkTextIter *iter, int line_index);
+
+gdouble
+gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gchar bracket);
+
+gint
+gtk_text_buffer_get_first_unmatched_parenthesis_pos (GtkTextBuffer *buffer, gint pos);
 
 gchar *
 gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index);

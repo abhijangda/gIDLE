@@ -122,9 +122,9 @@ codewidget_new ()
     g_signal_connect_after (G_OBJECT (codewidget->sourceview), "draw",
                      G_CALLBACK (codewidget_draw), codewidget);
                     
-    GtkSourceLanguageManager *languagemanager = gtk_source_language_manager_new();
-    GtkSourceLanguage *language = gtk_source_language_manager_guess_language(languagemanager,"file.py",NULL);
-    gtk_source_buffer_set_language(codewidget->sourcebuffer,language);
+    GtkSourceLanguageManager *languagemanager = gtk_source_language_manager_new ();
+    GtkSourceLanguage *language = gtk_source_language_manager_guess_language (languagemanager, "file.py", NULL);
+    gtk_source_buffer_set_language (codewidget->sourcebuffer, language);
     
     codewidget->line_num_widget = gtk_drawing_area_new (); 
     
@@ -176,9 +176,11 @@ codewidget_new ()
     codewidget->file_mode = FILE_NEW;
     codewidget->py_class_array = NULL;
     codewidget->py_class_array_size = 0;
-    
+    codewidget->py_nested_class_array = NULL;
+    codewidget->py_nested_class_array_size = 0;
+
     /*New class "Global Scope" for global functions*/
-    PyClass *py_class = py_class_new ("Global Scope", NULL, NULL, NULL, -1, -1);
+    PyClass *py_class = py_class_new ("Global Scope", NULL, NULL, NULL, -1, 0);
     codewidget_add_class (codewidget, py_class);
     
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (codewidget->class_combobox),
@@ -210,7 +212,7 @@ codewidget_destroy (CodeWidget * code_widget)
     gtk_widget_destroy (code_widget->scrollwin);
     gtk_widget_destroy (code_widget->hbox);
     gtk_widget_destroy (code_widget->vbox);
-    
+    g_free (code_widget->py_nested_class_array);
     g_free (code_widget->file_path);
     g_free (code_widget);    
 }
@@ -476,6 +478,24 @@ codewidget_set_text (CodeWidget *codewidget, gchar *text)
                      G_CALLBACK (codewidget_mark_set), codewidget);
 }
 
+void
+print_nested_array (PyClass **py_classv, int index, int size)
+{
+    if (index == size)
+        return;
+
+    int i;
+    printf ("Inside class %s\n", py_classv [index]->name);
+    for (i = 0; i < py_classv [index]->nested_classes_size; i++)
+    {
+        printf ("Class %s size %d\n", py_classv [index]->nested_classes [i]->name, py_classv [index]->nested_classes [i]->nested_classes_size);
+        print_nested_array (py_classv [index]->nested_classes [i]->nested_classes, 0, py_classv [index]->nested_classes [i]->nested_classes_size);
+    }
+    printf ("Outside class %s\n", py_classv[index]->name);
+    print_nested_array (py_classv, ++index, size);
+}
+
+
 /*Get classes and functions 
  * of current codewidget
  */
@@ -505,7 +525,7 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
                                              start, indentation));
             g_free (class_def_string);
             g_match_info_next (match_info_class, NULL);
-
+            printf ("class %s\n", codewidget->py_class_array [class]->name);
             /*Adding to combo_class*/
             gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (codewidget->class_combobox),
                                            codewidget->py_class_array [class]->name);
@@ -529,6 +549,16 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
             g_match_info_fetch_pos (match_info_func, 0, &start, &end);
             PyFunc *py_func = py_func_new_from_def (func_def_string, start,
                                                    indentation);
+
+            if (!py_func)
+            {
+                g_free (func_def_string);
+                g_match_info_next (match_info_func, NULL);
+                if (g_match_info_matches (match_info_func))
+                    continue;
+                else
+                   break;
+            }
             
             /*Add py_func to desired py_class*/
             int i = -1;
@@ -539,7 +569,9 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
                    codewidget->py_class_array [class]->indentation + 1 == indentation)
                     break;
             }
-
+            if (class == -1)
+                class = 0;
+            
             py_funcv_append (&(codewidget->py_class_array [class]->py_func_array),
                             py_func);
             /*************************/
@@ -547,8 +579,14 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
             g_free (func_def_string);
             g_match_info_next (match_info_func, NULL);
         }
-        while (g_match_info_matches (match_info_func));        
+        while (g_match_info_matches (match_info_func));
     }
+    /*Now, add nested classes in to their parents*/     
+    convert_py_class_array_to_nested_class_array (&(codewidget->py_nested_class_array), 
+                                                  &(codewidget->py_nested_class_array_size),
+                                                  codewidget->py_class_array,
+                                                  codewidget->py_class_array_size,
+                                                  0);
 }
 
 /*Called when func_combobox
@@ -616,25 +654,33 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
 {
     GtkTextIter iter, new_iter;
     GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (widget));
-    int indentation, i, col, new_col, line;
+    int indentation, i, col, new_col, line, pos;
     gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
     gchar *line_text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter));
     col = gtk_text_iter_get_line_offset (&iter);
     line = gtk_text_iter_get_line (&iter);
+    pos = gtk_text_iter_get_offset (&iter);
 
     switch (event->key.keyval)
     {
         case GDK_KEY_Return:
-            indentation = get_indent_spaces_in_string (line_text);
-            //Search for ':' in line and increase indentation if found otherwise not
-            if (g_strrstr (line_text, ":"))
-                indentation += indent_width;
-            
-            gtk_text_buffer_insert (buffer, &iter, "\n", 1);
-            for (i = 1; i <= indentation/indent_width; i++)
-                gtk_text_buffer_insert (buffer, &iter, indent_width_str, indent_width);
-
-            return TRUE;
+            {
+                //int first_open_pos;
+                //first_open_pos = gtk_text_buffer_get_first_open_unmatched_parenthesis_pos (buffer, pos);
+                //if (first_open_pos != -1)
+                    //indentation = first_open_pos + 1;
+               // else
+                indentation = get_indent_spaces_in_string (line_text);
+                /*Search for ':' in line and increase indentation if found otherwise not*/
+                if (g_strrstr (line_text, ":"))
+                    indentation += indent_width;
+                
+                gtk_text_buffer_insert (buffer, &iter, "\n", 1);
+                for (i = 1; i <= indentation; i++)
+                    gtk_text_buffer_insert (buffer, &iter, " ", 1);
+    
+                return TRUE;
+            }
         
         case GDK_KEY_Left:
             indentation = get_indent_spaces_in_string (line_text);

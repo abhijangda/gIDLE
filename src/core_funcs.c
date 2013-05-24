@@ -175,10 +175,25 @@ remove_all_bookmarks ()
     g_free (bookmark_array);
 }
 
+/*To count number of times str2
+ * appears in str1
+ */
+int
+str_count_str (gchar *str1, gchar *str2)
+{
+    int count = 0;
+
+    while ((str1 = g_strstr_len (str1, -1, str2)) != NULL)
+    {
+        str1 += strlen (str2);
+        count++;
+    }
+    return count;
+}
+
 /* To set 
  * file data
 */
-
 gboolean
 set_file_data (char *file_path, gchar *file_data, gsize length)
 {
@@ -196,7 +211,7 @@ set_file_data (char *file_path, gchar *file_data, gsize length)
     return TRUE;
 }
 
-/*Get selected text
+/* Get selected text
  * in buffer
  */
 gchar *
@@ -208,8 +223,151 @@ gtk_text_buffer_get_selected_text (GtkTextBuffer *buffer)
     return gtk_text_buffer_get_text (buffer, &start, &end, TRUE);
 }
 
-/*Returns number of
- *indent spaces in string
+/* To get first open unmatched 
+ * parenthesis position from reverse
+ */
+gint
+gtk_text_buffer_get_first_open_unmatched_parenthesis_pos (GtkTextBuffer *buffer, gint pos)
+{
+    GtkTextIter iter;
+    gint line;
+    gchar bracket1 = 0, bracket2 = 0;
+    int count = 0, indentation, le_indent_count = 0;
+    gchar *line_text;
+    gtk_text_buffer_get_iter_at_offset (buffer, &iter, pos);
+    line = gtk_text_iter_get_line (&iter);
+    pos++;
+    line_text = gtk_text_buffer_get_line_text (buffer, line);
+    indentation = get_indent_spaces_in_string (line_text);
+    /* Traverse each line upward, untill difference of numbers of open and closed
+    *  brackets is equal to 1.
+    * Break the loop when second line which is less than or equal to of the same
+    *  indentation as of starting line is found
+    */
+    do
+    {
+        pos --;
+        if (pos < 0)
+        {
+            g_free (line_text);
+            line_text = gtk_text_buffer_get_line_text (buffer, --line);
+            if (!line_text)
+                return -1;
+            if (get_indent_spaces_in_string (line_text) < indentation)
+                le_indent_count++;
+            if (le_indent_count == 2)
+            {
+                printf("same indent count\n");
+                return -1;
+            }
+            pos = strlen (line_text) - 1;
+        }
+        if (line_text [pos] == '(' || line_text [pos] == '[')
+            count ++;
+        if (line_text [pos] == ')' || line_text [pos] == ']')
+            count --; 
+    }
+    while (count != 1 && line >= 0);
+    g_free (line_text);
+    printf ("pos%d\n", pos);
+    return pos;
+}
+
+/* To get matching paranthesis pos 
+ * for char bracket
+ */
+gdouble
+gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gchar bracket)
+{
+    GtkTextIter iter;
+    gint line;
+    gchar bracket1, bracket2;
+    gboolean increase_pos;
+    int count;
+    gchar *line_text;
+    gtk_text_buffer_get_iter_at_offset (buffer, &iter, pos);
+    line = gtk_text_iter_get_line (&iter);
+
+    if (bracket == '(')
+    {
+        bracket1 = '(';
+        bracket2 = ')';
+        increase_pos = TRUE;
+    }
+    else if (bracket == ')')
+    {
+        bracket1 = ')';
+        bracket2 = '(';
+        increase_pos = FALSE;
+    }
+    else if (bracket == '[')
+    {
+        bracket1 = '[';
+        bracket2 = ']';
+        increase_pos = TRUE;
+    }
+    else if (bracket == ']')
+    {
+        bracket1 = ']';
+        bracket2 = '[';
+        increase_pos = FALSE;
+    }
+    else if (bracket == '{')
+    {
+        bracket1 = '{';
+        bracket2 = '}';
+        increase_pos = TRUE;
+    }
+    else if (bracket == '}')
+    {
+        bracket1 = '}';
+        bracket2 = '{';
+        increase_pos = FALSE;
+    }
+    else
+        return -1;
+        
+    line_text = gtk_text_buffer_get_line_text (buffer, line);
+    
+    while ((increase_pos && pos < strlen (line_text) && line_text [pos++] != bracket1)
+           || (!increase_pos && pos >= 0 && line_text [pos--] != bracket1));
+   
+    if (pos >= 0 || pos < strlen (line_text))
+        count ++;
+
+    while (count != 0)
+    {
+        if (increase_pos)
+        {
+            pos ++;
+            if (pos >= strlen (line_text))
+            {
+                g_free (line_text);
+                line_text = gtk_text_buffer_get_line_text (buffer, ++line);
+                pos = 0;
+            }
+        }
+        else
+        {
+            pos --;
+            if (pos < 0)
+            {
+                g_free (line_text);
+                line_text = gtk_text_buffer_get_line_text (buffer, --line);
+                pos = strlen (line_text);
+            }
+        }
+        
+        if (line_text [pos] == bracket1)
+            count ++;
+        if (line_text [pos] == bracket2)
+            count --;
+    }
+    return pos;
+}
+
+/* Returns number of
+ * indent spaces in string
  */
 int
 get_indent_spaces_in_string (char *string)
@@ -354,6 +512,9 @@ gchar *
 gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index)
 {
     GtkTextIter start_iter, end_iter;
+    if (line_index < 0)
+        return NULL;
+
     gtk_text_buffer_get_iter_at_line (buffer, &start_iter, line_index);
     gtk_text_buffer_get_line_end_iter (buffer, &end_iter, line_index);
     gchar *text = gtk_text_buffer_get_text (buffer, &start_iter, &end_iter, TRUE);

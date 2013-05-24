@@ -8,7 +8,13 @@
 PyFunc *
 py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation)
 {
-    PyFunc *py_func = g_malloc (sizeof (PyFunc));
+    PyFunc *py_func = g_try_malloc (sizeof (PyFunc));
+    if (!py_func)
+    {
+        printf ("Cannot allocate new PyFunc in py_func_new\n");
+        return NULL;
+    }
+
     py_func->name = g_strdup (name);
     py_func->argv = g_strdupv (argv);
     py_func->pos = pos;
@@ -29,9 +35,17 @@ py_func_new_from_def (gchar *def_string, gdouble pos, int indentation)
     
     func += strlen ("def");
     gchar *open_bracket = g_strstr_len (def_string, -1, "(");
-    
+
+    if (!open_bracket)
+        open_bracket = &def_string [strlen (def_string) - 1];
     //Copying only func_name
-    gchar *name = g_malloc0 (sizeof (gchar) *(open_bracket - func));
+    gchar *name = g_try_malloc0 (sizeof (gchar) *((open_bracket - func) + 1));
+    if (!name)
+    {
+        printf ("Cannot get name of func in py_func_new_from_def\n");
+        return NULL;
+    }
+    
     gchar *n = name;
     gchar *i = func-1;
     while (++i != open_bracket)
@@ -51,6 +65,13 @@ py_func_new_from_def (gchar *def_string, gdouble pos, int indentation)
     *--p = remove_char (*p,')');
     
     PyFunc *py_func = py_func_new (name, argv, pos, indentation);
+    if (!py_func)
+    {
+        g_free (name);
+        g_strfreev (argv);
+        return NULL;
+    }
+
     g_free (name);
     g_strfreev (argv);
     return py_func;

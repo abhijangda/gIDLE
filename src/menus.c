@@ -5,6 +5,8 @@
 #include "reg_exp_dialog.h"
 #include "go_to_line_dialog.h"
 #include "main.h"
+#include "python_shell.h"
+
 #include <string.h>
 
 //File Menu
@@ -13,6 +15,7 @@
  */
 extern gchar *search_text;
 extern GtkWidget *status_bar;
+extern ChildProcessData *python_shell_data;
 
 void
 file_new_activate (GtkWidget *widget)
@@ -645,6 +648,7 @@ edit_fold_current_func_activate (GtkWidget *widget)
 void
 edit_autocomplete_activate (GtkWidget *widget)
 {
+    
 }
 
 /* To get matching 
@@ -653,6 +657,29 @@ edit_autocomplete_activate (GtkWidget *widget)
 void
 edit_matching_paranthesis_activate (GtkWidget *widget)
 {
+    gint pos, match_pos;
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+    GtkTextIter iter, iter2;
+    gchar *line_text;
+    gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
+    pos = gtk_text_iter_get_offset (&iter);
+    line_text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter));    
+    match_pos = gtk_text_buffer_get_matching_parethesis_pos (buffer, pos, line_text [pos]);
+    if (match_pos == -1)
+    {
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, 
+                           "Cannot Find Matching Parenthesis");
+        g_free (line_text);
+        return;
+    }
+
+    gtk_text_buffer_get_iter_at_offset (buffer, &iter2, match_pos);
+    if (match_pos > pos)
+        gtk_text_buffer_select_range (buffer, &iter, &iter2);
+    else
+       gtk_text_buffer_select_range (buffer, &iter2, &iter);
+    
+    g_free (line_text);
 }
 
 //Format Menu
@@ -1157,7 +1184,9 @@ void
 navigate_bookmarks_activate  (GtkWidget *widget)
 {
 }
-
+/*To navigate to the begginning
+ * of current block
+ */
 void
 navigate_go_to_block_start_activate  (GtkWidget *widget)
 {
@@ -1180,12 +1209,41 @@ navigate_go_to_block_start_activate  (GtkWidget *widget)
     gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot Block's Start");
 }
 
+/*To navigate to the definition
+ * of selected function
+ */
 void
 navigate_go_to_func_def_activate  (GtkWidget *widget)
 {
-    
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER (code_widget_array [get_current_index ()]->sourcebuffer);
+    gchar *selected_text = gtk_text_buffer_get_selected_text (buffer);
+    int i;
+    for (i = 0; i < code_widget_array [get_current_index ()]->py_class_array_size; i++)
+    {
+        PyFunc **p = code_widget_array [get_current_index ()]->py_class_array [i]->py_func_array;
+
+        if (!p)
+             continue;
+
+        while (*p)
+        {
+            if (g_strcmp0 (selected_text, (*p)->name) == 0)
+            {
+                GtkTextIter iter;
+                gtk_text_buffer_get_iter_at_offset (buffer, &iter, (*p)->pos);
+                go_to_pos_and_select_line (GTK_TEXT_VIEW (code_widget_array [get_current_index ()]->sourceview),
+                                          (*p)->pos);
+                return;
+            }
+            p++;
+        }
+    }
+    gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot Find Function");
 }
 
+/*To go to entered
+ * line
+ */
 void
 navigate_go_to_line_activate  (GtkWidget *widget)
 {
@@ -1243,16 +1301,20 @@ project_recent_activate (GtkWidget *widget)
 void
 python_shell_open_activate (GtkWidget *widget)
 {
+    load_python_shell ();
 }
 
 void
 python_shell_restart_activate (GtkWidget *widget)
 {
+    shell_restart_shell_activate (widget);
 }
 
 void
 python_shell_close_activate (GtkWidget *widget)
 {
+    extern GtkWidget *python_shell_win;
+    gtk_widget_destroy (python_shell_win);
 }
 
 
@@ -1279,7 +1341,6 @@ run_debug_project_activate (GtkWidget *widget)
 
 
 //Debug Menu
-
 void
 debug_open_pdb_shell_activate (GtkWidget *widget)
 {

@@ -30,6 +30,8 @@ struct _codewidget
     int line_history_current_index;
     int prev_line;
     PyClass **py_class_array;
+    PyClass **py_nested_class_array;
+    int py_nested_class_array_size;
     int py_class_array_size;
     int drawing_area_width;
     gulong combo_class_changed_handler_id;

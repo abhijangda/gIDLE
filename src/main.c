@@ -1,19 +1,21 @@
 #include "main.h"
 #include "menus.h"
 #include "toolbar.h"
+
 //Remember to free everything when program ends in destroy or delete-event handler
 
 GtkBuilder *builder;
 extern gchar *search_text;
 GtkWidget *status_bar;
+ChildProcessData *python_shell_data;
 
 int
 main (int argc, char *argv [])
-{  
+{    
     GtkWidget *navigate_bookmarks;
     
     gtk_init (&argc, &argv);
-    
+
     builder = gtk_builder_new ();
     gtk_builder_add_from_file (builder, "./ui/main.ui", NULL);
 
@@ -284,6 +286,7 @@ main (int argc, char *argv [])
     is_code_completion = TRUE;
     is_code_folding = TRUE;
     show_line_numbers = TRUE;
+    python_shell_path = "/usr/bin/python";
     /*************/
     
     gtk_window_maximize (GTK_WINDOW (window));

@@ -2,6 +2,7 @@
 #include "codewidget.h"
 #include "bookmark.h"
 #include "line_history_item.h"
+#include "pty_fork.h"
 
 #ifndef MAIN_H
 #define MAIN_H
@@ -23,6 +24,7 @@ GtkFileFilter *all_filter;
 GtkFileFilter *pyproj_file;
 GtkWidget *line_history_menu;
 LineHistoryItem **line_history_item_array;
+
 /***Options****/
 int indent_width;
 char *indent_width_str;
@@ -32,6 +34,7 @@ char *tab_width_str;
 gboolean is_code_completion;
 gboolean is_code_folding;
 gboolean show_line_numbers;
+char *python_shell_path;
 /*************/
 
 /**Bookmark related**/
