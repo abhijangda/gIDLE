@@ -445,15 +445,15 @@ get_text_at_index (int index)
  */
 
 gboolean
-is_file_modified ()
+is_file_modified (int current_page)
 {
-    int current_page = get_current_index ();    
     gchar *code_widget_str = get_text_at_index (current_page);
     
     if (code_widget_array [current_page]->file_mode == FILE_NEW)
     {
         if (strcmp (code_widget_str, "") != 0)
             return TRUE;
+
         return FALSE;
     }
         

@@ -6,6 +6,7 @@
 #include "go_to_line_dialog.h"
 #include "main.h"
 #include "python_shell.h"
+#include "run_script_dialog.h"
 
 #include <string.h>
 
@@ -21,7 +22,7 @@ void
 file_new_activate (GtkWidget *widget)
 {
     int current_index = get_current_index ();
-    if (is_file_modified () && current_index != -1)
+    if (is_file_modified (current_index) && current_index != -1)
     {
         GtkWidget *dialog;
         dialog = gtk_message_dialog_new (GTK_WINDOW (window),
@@ -72,7 +73,7 @@ file_open_activate (GtkWidget *widget)
         return;
         
     //Check if file has modified since last save
-    if (is_file_modified ())
+    if (is_file_modified (get_current_index ()))
     {
         GtkWidget *dialog;
         dialog = gtk_message_dialog_new (GTK_WINDOW (window),
@@ -278,7 +279,7 @@ file_close_tab_activate (GtkWidget *widget)
     if (current_index == -1)
         return;
         
-    if (is_file_modified ())
+    if (is_file_modified (current_index))
     {
         GtkWidget *dialog;
         dialog = gtk_message_dialog_new (GTK_WINDOW (window),
@@ -1322,6 +1323,7 @@ python_shell_close_activate (GtkWidget *widget)
 void
 run_run_script_activate (GtkWidget *widget)
 {
+    load_run_script_dialog (code_widget_array [get_current_index ()]->file_path);
 }
 
 void

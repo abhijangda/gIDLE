@@ -3,17 +3,20 @@
 #ifndef PYTHON_SHELL_H
 #define PYTHON_SHELL_H
 
+#define PY_SHELL_STATE_SHELL 0 /*Shell is running*/
+#define PY_SHELL_STATE_FILE     1 /*Shell is executing a file*/
+
 void
 load_python_shell ();
 
 void
-run_file_in_python_shell (char *filename);
+run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv [], gchar *env []);
 
 void
 python_shell_destroy ();
 
 gboolean
-execute_python_shell ();
+execute_python_shell (gchar *curr_dir, char *argv[]);
 
 void
 python_shell_text_view_append_output (gchar *text, gssize len);

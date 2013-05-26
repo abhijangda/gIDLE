@@ -60,11 +60,19 @@ ptyFork (ChildProcessData *python_shell_data, GError **error)
     python_shell_data->master_fd = mfd;
     python_shell_data->slave_name = g_strdup (ptsname (mfd));
 
-    if (!g_spawn_async (NULL, python_shell_data->argv, NULL, G_SPAWN_FILE_AND_ARGV_ZERO, 
+    /*if (!g_spawn_async (python_shell_data->current_dir, python_shell_data->argv, NULL, 0, 
                        child_func, (gpointer)python_shell_data, 
                        &(python_shell_data->pid), error))
 
-        return FALSE;
+        return FALSE;*/
 
+    pid_t childPid = fork ();
+    if (childPid == 0)
+    {
+        gtk_main_quit ();
+        child_func ((gpointer)python_shell_data);
+        execv (python_shell_data->argv [0], python_shell_data->argv);
+    }
+    python_shell_data->pid = childPid;
     return TRUE;
 }

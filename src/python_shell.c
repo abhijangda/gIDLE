@@ -3,6 +3,8 @@
 #include "pty_fork.h"
 #include "python_shell.h"
 
+#include <signal.h>
+
 #define RESTART_MSG "\n\n############Restarting Shell###############\n\n"
 
 GtkBuilder *python_shell_builder;
@@ -18,6 +20,7 @@ static GtkWidget *python_shell_source_view;
 static GtkSourceBuffer *python_shell_source_buffer;
 static gint last_pos = 0;
 GtkWidget *python_shell_win;
+static int py_shell_state = PY_SHELL_STATE_SHELL;
 
 /* To Load Python Shell
  * window
@@ -29,8 +32,10 @@ load_python_shell ()
         return;
 
     char *py_argv[] = {python_shell_path, NULL};
-    if (!execute_python_shell (py_argv))
+    if (!execute_python_shell (NULL, py_argv))
        return;
+    
+    py_shell_state = PY_SHELL_STATE_SHELL;
 
     python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
     g_io_add_watch (python_shell_data->channel, G_IO_IN,
@@ -43,20 +48,54 @@ load_python_shell ()
  * Python Shell
  */
 void
-run_file_in_python_shell (char *filename)
+run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv[], gchar *env [])
 {
+    /* Run shell or restart it if its already loaded */
+    GtkTextBuffer *buffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
     if (python_shell_loaded)
+    {
         close_python_shell_process ();
+        gtk_text_buffer_insert_at_cursor (buffer,
+                                      RESTART_MSG,
+                                      -1);
+    }
     else
         show_python_shell_win ();
-    
-    char *py_argv[] = {python_shell_path, filename, NULL};
-    if (!execute_python_shell (py_argv))
-       return;
 
+    gchar *py_argv[] = {python_shell_path, NULL};
+    
+    if (!execute_python_shell (curr_dir, py_argv))
+       return;
+    
     python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
     g_io_add_watch (python_shell_data->channel, G_IO_IN,
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
+
+    /* Setting arguments to be passed to file */
+    if (argv != NULL)
+    {
+        GString *gstr_argv = g_string_new ("import sys\nsys.argv=[");
+        int i = -1;
+        while (argv [++i])
+        {
+            if (i > 0)
+                gstr_argv = g_string_append_c (gstr_argv, ',');
+
+            gstr_argv = g_string_append_c (gstr_argv, '\'');
+            gstr_argv = g_string_append (gstr_argv, argv [i]);
+            gstr_argv = g_string_append_c (gstr_argv, '\'');
+        }
+        gstr_argv = g_string_append_c (gstr_argv, ']');
+        write (python_shell_data->master_fd, gstr_argv->str, gstr_argv->len);
+        g_string_free (gstr_argv, TRUE);
+    }
+    
+    /* Executing file */
+    char *write_str = g_strdup_printf ("execfile ('%s')", filename);
+    write (python_shell_data->master_fd, write_str, strlen (write_str));
+    write (python_shell_data->master_fd, "\n", 1);
+    
+    py_shell_state = PY_SHELL_STATE_FILE;
 }
 
 /* To show Python Shell
@@ -147,11 +186,25 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
         return TRUE;
 
     memset (&buffer, 0, sizeof(buffer));
-    
+    printf ("fdfg\n");
     //status = g_io_channel_read_chars (channel, buffer, 255, &size_read, NULL);
     //if (status != G_IO_STATUS_ERROR)
     if (read (python_shell_data->master_fd, buffer, 255) != 0)
+    {
         python_shell_text_view_append_output (buffer, -1);
+
+        /*To detect whether script has ended or not*/
+        if (py_shell_state == PY_SHELL_STATE_FILE)
+        {
+            gchar *pos = g_strrstr (buffer, ">>>");
+            if (pos != NULL)
+            {
+                /*If >>> is at the end of buffer then restart shell */
+                if (strlen (pos) == 3 || strlen (pos) == 4)
+                     shell_restart_shell_activate (NULL);
+            }
+        }
+    }
 
     return TRUE;
 }
@@ -159,14 +212,16 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
 static void 
 close_python_shell_process ()
 {
-    g_io_channel_unref (python_shell_data->channel);
-    //g_io_channel_shutdown (python_shell_data->channel, TRUE, NULL);
-    close (python_shell_data->master_fd);
-    g_spawn_close_pid (python_shell_data->pid);
-    
-    g_strfreev (python_shell_data->argv);
-    g_free (python_shell_data->slave_termios);
-    g_free (python_shell_data);
+    write (python_shell_data->master_fd, "exit ()", strlen ("exit ()"));
+    write (python_shell_data->master_fd, "\n", 1);
+//    g_io_channel_unref (python_shell_data->channel);
+//    g_io_channel_shutdown (python_shell_data->channel, TRUE, NULL);
+//    close (python_shell_data->master_fd);
+//    kill (python_shell_data->pid, SIGKILL)//////;
+
+//    g_strfreev (python_shell_data->argv);
+//    g_free (python_shell_data->slave_termios);
+//    g_free (python_shell_data);
 }
 
 /* Called when Python Shell 
@@ -183,13 +238,14 @@ python_shell_destroy (GtkWidget *widget)
  * process with supplied arguments
  */
 gboolean
-execute_python_shell (char *argv[])
+execute_python_shell (gchar *curr_dir, char *argv[])
 {
     GError *error = NULL;
 
     python_shell_data = g_try_malloc (sizeof (ChildProcessData));
     python_shell_data->argv = g_strdupv (argv);
     python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
+    python_shell_data->current_dir = curr_dir;
 
     tcgetattr(0, python_shell_data->slave_termios);
 
@@ -289,6 +345,8 @@ python_shell_text_view_key_press_event (GtkWidget *widget, GdkEvent *event)
         }
 
         if (write (python_shell_data->master_fd, text, strlen (text)) > 0)
+        //gssize written;
+        //if (g_io_channel_write_chars (python_shell_data->channel, text, strlen (text), &written, NULL))
         {
             write (python_shell_data->master_fd, "\n", 1);
             return FALSE;
@@ -407,18 +465,18 @@ shell_restart_shell_activate (GtkWidget *widget)
     /* Closing the current open shell */
     close_python_shell_process ();
     
-    gtk_text_buffer_insert_at_cursor (buffer,
-                                      RESTART_MSG,
-                                      -1);
+    gtk_text_buffer_insert_at_cursor (buffer, RESTART_MSG, -1);
 
     /* Executing new python shell process */
-    char *py_argv[] = {python_shell_path, NULL};
-    if (!execute_python_shell (py_argv))
+    /*char *py_argv[] = {python_shell_path, NULL};
+    if (!execute_python_shell (NULL, py_argv))
        return;
     
     python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
     g_io_add_watch (python_shell_data->channel, G_IO_IN,
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
+                
+    py_shell_state = PY_SHELL_STATE_SHELL;*/
 }
 
 void
@@ -428,8 +486,36 @@ shell_view_last_restart_activate (GtkWidget *widget)
                    GTK_TEXT_SEARCH_TEXT_ONLY);
 }
 
+/* To go to the line in the file
+ * where error occurred
+ */
 void
 debug_go_to_file_error_activate (GtkWidget *widget)
 {
+    GtkTextBuffer *buffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
+    GtkTextIter start_iter, iter, end_iter;
+
+    if (!find_previous (GTK_TEXT_VIEW (python_shell_source_view),
+                    "Traceback", GTK_TEXT_SEARCH_TEXT_ONLY))
+        return;
+    
+    gtk_text_buffer_get_selection_bounds (buffer, &start_iter, &iter);
+    
+    if (!find_next (GTK_TEXT_VIEW (python_shell_source_view),
+                    ">>>", GTK_TEXT_SEARCH_TEXT_ONLY))
+        return;
+    
+    gtk_text_buffer_get_selection_bounds (buffer, &iter, &end_iter);
+    
+    gchar *text = gtk_text_buffer_get_text (buffer, &start_iter, &end_iter, TRUE);
+    printf ("text%s\n", text);
+    GRegex *regex;
+    GMatchInfo *match_info;
+    
+    regex = g_regex_new ("File\\b.+\\bline\\b.+", 0, 0, NULL);
+    if (g_regex_match (regex, text, 0, &match_info))
+    {
+        printf ("ffff%s\n", g_match_info_fetch(match_info,0));
+    }
     
 }

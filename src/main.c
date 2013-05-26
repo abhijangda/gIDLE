@@ -2,7 +2,10 @@
 #include "menus.h"
 #include "toolbar.h"
 
-//Remember to free everything when program ends in destroy or delete-event handler
+static gboolean
+delete_event (GtkWidget *widget, GdkEvent *event);
+static void
+main_window_destroy (GtkWidget *widget);
 
 GtkBuilder *builder;
 extern gchar *search_text;
@@ -263,6 +266,13 @@ main (int argc, char *argv [])
     gtk_menu_item_set_submenu (GTK_MENU_ITEM (gtk_builder_get_object (builder, "navigate_line_history")),
                               line_history_menu);
 
+    /* Connecting window's signals and events */
+    g_signal_connect (window, "delete-event",
+                      G_CALLBACK (delete_event), NULL);
+    g_signal_connect (window, "destroy",
+                      G_CALLBACK (main_window_destroy), NULL);
+    /********************************/
+
     //Creating code_widget_array
     code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
     code_widget_array [0] = codewidget_new ();
@@ -293,4 +303,98 @@ main (int argc, char *argv [])
     gtk_widget_show_all (GTK_WIDGET (window));
     gtk_main ();
     return 0;
+}
+
+/* "delete-event" handler for
+ * window
+ */
+static gboolean
+delete_event (GtkWidget *widget, GdkEvent *event)
+{
+    int *not_saved_tabs_array = NULL;
+    int not_saved_tabs_array_size = 0;
+    int i;
+    
+    /* Checking which files has been modified */
+    for (i = 0; i < code_widget_array_size; i++)
+    {
+        if (is_file_modified (i))
+        {
+            not_saved_tabs_array = g_realloc (not_saved_tabs_array,
+                                             (not_saved_tabs_array_size + 1)*sizeof (int));
+            not_saved_tabs_array [not_saved_tabs_array_size] = i;
+            not_saved_tabs_array_size ++;
+        }
+    }
+
+    if (not_saved_tabs_array_size == 0)
+        return FALSE;
+    
+    /* Creating confirmation dialog */
+    GtkWidget *dialog = gtk_dialog_new_with_buttons ("gIDLE",
+                                                    GTK_WINDOW (window),
+                                                    GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                    "Close without saving", 2, 
+                                                    "Save", 1, "Cancel", 0, NULL);
+    
+    GtkWidget *not_saved_chk_array [not_saved_tabs_array_size];
+    GtkWidget *dialog_content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+
+    for (i = 0; i < not_saved_tabs_array_size; i++)
+    {
+        const gchar *label;
+        label = gtk_notebook_get_tab_label_text (GTK_NOTEBOOK (notebook),
+                                                code_widget_array [i]->vbox);
+
+        not_saved_chk_array [i] = gtk_check_button_new_with_label (label);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (not_saved_chk_array [i]), TRUE);
+        gtk_box_pack_start (GTK_BOX (dialog_content_area),
+                           not_saved_chk_array [i], FALSE, FALSE, 2);
+    }
+    
+    gtk_widget_show_all (dialog);
+
+    int run = gtk_dialog_run (GTK_DIALOG (dialog));
+    if (run == 0)
+    {
+        /* If "Cancel" was clicked */
+        g_free (not_saved_tabs_array);
+        gtk_widget_destroy (dialog);
+        return TRUE;
+    }
+    
+    if (run == 1)
+    {
+        /* If "Save" was clicked */
+        for (i = 0; i < not_saved_tabs_array_size; i++)
+        {
+            if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (not_saved_chk_array [i])))
+            {
+                gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), not_saved_tabs_array [i]);
+                file_save_activate (NULL);
+            }
+        }
+        
+        return FALSE;
+    }
+    
+    if (run == 2)
+    {
+        /* If "Close without saving" was clicked */
+        g_free (not_saved_tabs_array);
+        gtk_widget_destroy (dialog);
+        return FALSE;
+    }
+}
+
+static void
+main_window_destroy (GtkWidget *widget)
+{
+    int i;
+
+    for (i = 0; i < code_widget_array_size; i++)
+        codewidget_destroy (code_widget_array [i]);
+    
+    g_free (code_widget_array);
+    g_free (python_shell_data);
 }

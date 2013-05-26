@@ -23,6 +23,7 @@ struct child_func_data
     GPid pid;
     GIOChannel *channel;
     char **argv;
+    char *current_dir;
 };
 
 typedef struct child_func_data ChildProcessData;
