@@ -4,6 +4,7 @@
 #include "python_shell.h"
 
 #include <signal.h>
+#include <sys/epoll.h>
 
 #define RESTART_MSG "\n\n############Restarting Shell###############\n\n"
 
@@ -12,15 +13,19 @@ static gboolean python_shell_loaded = FALSE;
 extern GtkWidget *status_bar;
 extern ChildProcessData *python_shell_data;
 
-static void show_python_shell_win ();
-static gboolean read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data);
-static void close_python_shell_process ();
+static void
+show_python_shell_win ();
+static void
+close_python_shell_process ();
 
 static GtkWidget *python_shell_source_view;
 static GtkSourceBuffer *python_shell_source_buffer;
 static gint last_pos = 0;
 GtkWidget *python_shell_win;
 static int py_shell_state = PY_SHELL_STATE_SHELL;
+extern gboolean bash_loaded;
+static gboolean going_for_restart;
+static gchar *shell_str = NULL;
 
 /* To Load Python Shell
  * window
@@ -29,7 +34,12 @@ void
 load_python_shell ()
 {
     if (python_shell_loaded)
+    {
+        if (GTK_IS_WINDOW (python_shell_win))
+             gtk_window_present (GTK_WINDOW (python_shell_win));
+
         return;
+    }
 
     char *py_argv[] = {python_shell_path, NULL};
     if (!execute_python_shell (NULL, py_argv))
@@ -37,10 +47,6 @@ load_python_shell ()
     
     py_shell_state = PY_SHELL_STATE_SHELL;
 
-    python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
-    g_io_add_watch (python_shell_data->channel, G_IO_IN,
-                   (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
-    
     show_python_shell_win ();
 }
 
@@ -55,46 +61,43 @@ run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv[], gchar 
     if (python_shell_loaded)
     {
         close_python_shell_process ();
-        gtk_text_buffer_insert_at_cursor (buffer,
-                                      RESTART_MSG,
-                                      -1);
+        gtk_text_buffer_insert_at_cursor (buffer, RESTART_MSG, -1);
     }
     else
         show_python_shell_win ();
 
-    gchar *py_argv[] = {python_shell_path, NULL};
-    
-    if (!execute_python_shell (curr_dir, py_argv))
-       return;
-    
-    python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
-    g_io_add_watch (python_shell_data->channel, G_IO_IN,
-                   (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
+    /* Run all the commands in one go using "&&" */
+    /*Setting Kivy environment variable
+     * remove it and move it to options */
+     GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
 
+   /* Setting curr_dir */
+    if (curr_dir)
+    {
+        gstr_argv = g_string_append (gstr_argv, "cd ");
+        gstr_argv = g_string_append (gstr_argv, curr_dir);
+        gstr_argv = g_string_append (gstr_argv, " && ");
+    }
+   
+    gstr_argv = g_string_append (gstr_argv, "python ");
+    gstr_argv = g_string_append (gstr_argv, filename);
+    
     /* Setting arguments to be passed to file */
     if (argv != NULL)
     {
-        GString *gstr_argv = g_string_new ("import sys\nsys.argv=[");
         int i = -1;
         while (argv [++i])
         {
-            if (i > 0)
-                gstr_argv = g_string_append_c (gstr_argv, ',');
-
-            gstr_argv = g_string_append_c (gstr_argv, '\'');
+            gstr_argv = g_string_append_c (gstr_argv, ' ');
             gstr_argv = g_string_append (gstr_argv, argv [i]);
-            gstr_argv = g_string_append_c (gstr_argv, '\'');
         }
-        gstr_argv = g_string_append_c (gstr_argv, ']');
-        write (python_shell_data->master_fd, gstr_argv->str, gstr_argv->len);
-        g_string_free (gstr_argv, TRUE);
     }
     
     /* Executing file */
-    char *write_str = g_strdup_printf ("execfile ('%s')", filename);
-    write (python_shell_data->master_fd, write_str, strlen (write_str));
+    write (python_shell_data->master_fd, gstr_argv->str, gstr_argv->len);
     write (python_shell_data->master_fd, "\n", 1);
     
+    g_string_free (gstr_argv, TRUE);
     py_shell_state = PY_SHELL_STATE_FILE;
 }
 
@@ -116,6 +119,9 @@ show_python_shell_win ()
     
     python_shell_source_buffer = gtk_source_buffer_new (NULL);
     python_shell_source_view = gtk_source_view_new_with_buffer (python_shell_source_buffer);
+    
+    gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (python_shell_source_view), 
+                                  GTK_WRAP_WORD);
 
     g_signal_connect (G_OBJECT (python_shell_source_view), "key-press-event",
                      G_CALLBACK (python_shell_text_view_key_press_event), NULL); 
@@ -174,11 +180,11 @@ show_python_shell_win ()
  * master_fd stream whenever
  * available
  */
-static gboolean
+gboolean
 read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
 {
     GError *error = NULL;
-    gchar buffer [256];
+    gchar buffer [1024];
     gssize size_read;
     GIOStatus status;
 
@@ -186,22 +192,47 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
         return TRUE;
 
     memset (&buffer, 0, sizeof(buffer));
-    printf ("fdfg\n");
+    
     //status = g_io_channel_read_chars (channel, buffer, 255, &size_read, NULL);
     //if (status != G_IO_STATUS_ERROR)
-    if (read (python_shell_data->master_fd, buffer, 255) != 0)
+    
+    if (read (python_shell_data->master_fd, buffer, 1024) != 0)
     {
-        python_shell_text_view_append_output (buffer, -1);
+        if (!shell_str)
+           shell_str = g_strdup (buffer);
+
+        if (!python_shell_loaded)
+            return TRUE;
+
+        if (strcmp (buffer, shell_str) != 0)
+            python_shell_text_view_append_output (buffer, -1);
+            
+        if (g_io_channel_get_buffer_condition (channel) == G_IO_IN)
+            return TRUE;
 
         /*To detect whether script has ended or not*/
         if (py_shell_state == PY_SHELL_STATE_FILE)
         {
-            gchar *pos = g_strrstr (buffer, ">>>");
+            gchar *pos = g_strrstr (buffer, shell_str);
             if (pos != NULL)
             {
-                /*If >>> is at the end of buffer then restart shell */
-                if (strlen (pos) == 3 || strlen (pos) == 4)
-                     shell_restart_shell_activate (NULL);
+                /*If shell_str is at the end of buffer then restart shell */
+                if (strlen (pos) == strlen (shell_str) || strlen (pos) == strlen (shell_str) + 1)
+                {
+                    GtkTextBuffer *textbuffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
+
+                    gtk_text_buffer_insert_at_cursor (textbuffer, RESTART_MSG, -1);
+
+                    while (gtk_events_pending ())
+                        gtk_main_iteration_do (FALSE);
+
+                    /* Executing new python shell process */
+                    char *py_argv[] = {python_shell_path, NULL};
+                    if (!execute_python_shell (NULL, py_argv))
+                       return;
+
+                    py_shell_state = PY_SHELL_STATE_SHELL;
+                }
             }
         }
     }
@@ -212,16 +243,105 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
 static void 
 close_python_shell_process ()
 {
-    write (python_shell_data->master_fd, "exit ()", strlen ("exit ()"));
-    write (python_shell_data->master_fd, "\n", 1);
-//    g_io_channel_unref (python_shell_data->channel);
-//    g_io_channel_shutdown (python_shell_data->channel, TRUE, NULL);
-//    close (python_shell_data->master_fd);
-//    kill (python_shell_data->pid, SIGKILL)//////;
+    g_io_channel_flush (python_shell_data->channel, NULL);
 
-//    g_strfreev (python_shell_data->argv);
-//    g_free (python_shell_data->slave_termios);
-//    g_free (python_shell_data);
+    gboolean term_success = FALSE;
+
+    /* Terminate the process by sending SIGTERM */
+    GFile *proc = g_file_new_for_path ("/proc");
+    GFileEnumerator *enumerator = g_file_enumerate_children (proc, 
+                                                             G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                                             G_FILE_QUERY_INFO_NONE,
+                                                             NULL, NULL);    
+    GFileInfo *folder_info;
+    GError *error = NULL;
+
+    while (enumerator && 
+           (folder_info = g_file_enumerator_next_file (enumerator, NULL, &error)))
+    {
+        /* Enumerate through /proc and find the process */
+        /* whose PPID is the pid of terminal */
+        const gchar *name = g_file_info_get_name (folder_info);
+        if (g_strtod (name, NULL) <= python_shell_data->pid)
+        {
+            g_object_unref (folder_info);
+            continue;
+        }
+
+        GFile *proc_child = g_file_get_child (proc, name);
+        GFile *status_file = g_file_get_child (proc_child, "status");
+        gchar *status_path;
+        gchar *contents;
+        gsize readed = -1;
+        if (!status_file)
+        {
+            g_object_unref (proc_child);
+            g_object_unref (folder_info);
+            continue;
+        }
+        
+        if (g_file_load_contents (status_file, NULL, &contents, 
+                                  &readed, NULL, NULL))
+        {
+            gchar *ppid = g_strstr_len (contents, -1, "PPid:");
+            if (ppid)
+            {
+                GString *g_ppid = g_string_new("");
+                ppid += strlen ("PPid:");
+                ppid--;
+                while (*(++ppid) != '\n')
+                {
+                    if (isdigit (*ppid))
+                        g_string_append_c (g_ppid, *ppid);
+                }
+                
+                if (g_strtod (g_ppid->str, NULL) == python_shell_data->pid)
+                {
+                    /* Found the process with PPID equal to PID of Terminal */
+                    gchar *pid = g_strstr_len (contents, -1, "Pid:");
+                    g_ppid = g_string_erase (g_ppid, 0, -1);
+                    if (pid)
+                    {
+                        pid += strlen ("Pid:");
+                        pid--;
+                        while (*(++pid) != '\n')
+                        {
+                            if (isdigit (*pid))
+                                g_string_append_c (g_ppid, *pid);
+                        }
+                    
+                    int pid = g_strtod (g_ppid->str, NULL);
+                    
+                    /* Kill the process */
+                    kill (pid, SIGTERM);
+                    
+                    /* Wait for the python to terminate */
+                    int status;
+                    waitpid (pid, &status, 0);
+                    term_success  = TRUE;
+                    }
+                }
+                g_string_free (g_ppid, TRUE);
+            }                      
+        }
+
+        g_object_unref (status_file);
+        g_object_unref (proc_child);
+        g_object_unref (folder_info);
+    }
+
+    g_object_unref (proc);
+    
+    /* If cannot find the process, then do it the following way */
+    if (!term_success)
+    {
+        write (python_shell_data->master_fd, "exit ()", strlen ("exit ()"));
+        write (python_shell_data->master_fd, "\n", 1);
+    }
+
+    //if (python_shell_data->argv)
+        //g_strfreev (python_shell_data->argv);
+    
 }
 
 /* Called when Python Shell 
@@ -240,23 +360,60 @@ python_shell_destroy (GtkWidget *widget)
 gboolean
 execute_python_shell (gchar *curr_dir, char *argv[])
 {
-    GError *error = NULL;
-
-    python_shell_data = g_try_malloc (sizeof (ChildProcessData));
-    python_shell_data->argv = g_strdupv (argv);
-    python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
-    python_shell_data->current_dir = curr_dir;
-
-    tcgetattr(0, python_shell_data->slave_termios);
-
-    if (!ptyFork (python_shell_data, &error))
+    if (!bash_loaded)
     {
-        gchar *msg = g_strdup_printf ("Cannot run Python Shell (%s)", error->message);
-        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, msg);
-        g_free (msg);
-        g_error_free (error);
-        return FALSE;
+        GError *error  = NULL;
+    
+        python_shell_data = g_try_malloc (sizeof (ChildProcessData));
+        python_shell_data->argv = NULL;
+        python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
+        python_shell_data->current_dir = NULL;
+        
+        /* If bash hasn't been loaded then load it first */
+        if (!(bash_loaded = ptyFork (python_shell_data, &error)))
+        {
+            gchar *msg = g_strdup_printf ("Cannot run BASH (%s)", error->message);
+            gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, msg);
+            g_free (msg);
+            g_error_free (error);
+            return FALSE;
+        }
     }
+
+    python_shell_data->argv = g_strdupv (argv);
+    python_shell_data->current_dir = curr_dir;
+    
+    /* Setting curr_dir */
+    if (curr_dir)
+    {
+        GString *cd_gstring  = g_string_new ("cd ");
+        cd_gstring = g_string_append (cd_gstring, curr_dir);
+        write (python_shell_data->master_fd, cd_gstring->str, cd_gstring->len);
+        write (python_shell_data->master_fd, "\n", 1);
+        g_string_free (cd_gstring, TRUE);
+    }
+    
+    /*Setting Kivy environment variable
+     * remove it and move it to options */
+    GString *str  = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo/kivy && ");
+    str = g_string_append (str, python_shell_data->argv [0]);
+
+    /* Running Python Shell with argv */
+    if (python_shell_data->argv)
+    {
+        gchar **p = python_shell_data->argv;
+        p++;
+        while (*p)
+        {
+            str = g_string_append_c (str, ' ');
+            str = g_string_append (str, *p);
+            p++;
+        }
+    }
+
+    write (python_shell_data->master_fd, str->str, str->len);
+    write (python_shell_data->master_fd, "\n", 1);
+    g_string_free (str, TRUE);
     return TRUE;
 }
 
@@ -268,15 +425,15 @@ python_shell_text_view_append_output (gchar *text, gssize len)
 {
     GtkTextIter iter;
     GtkTextBuffer *buffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
-    gtk_text_buffer_get_iter_at_mark (buffer, &iter,
-                                     gtk_text_buffer_get_insert (buffer));
-
+    /*gtk_text_buffer_get_iter_at_mark (buffer, &iter,
+                                     gtk_text_buffer_get_insert (buffer));*/
+    gtk_text_buffer_get_end_iter (buffer, &iter);
     /*Check if text contains ...*/
     if (g_strcmp0 (text, "... ") == 0)
     {
         /* If yes, then indentation should also be inserted*/
         gchar *prev_line_text = gtk_text_buffer_get_line_text (buffer,
-                                                              gtk_text_iter_get_line (&iter) - 1);
+                                                              gtk_text_iter_get_line (&iter) - 1, TRUE);
         int indentation = get_indent_spaces_in_string (prev_line_text);
         int i;
 
@@ -454,6 +611,43 @@ py_shell_edit_find_activate (GtkWidget *widget)
     load_find_dialog (python_shell_source_view);
 }
 
+static gboolean 
+_shell_restart (gpointer data)
+{
+    GtkTextBuffer *buffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
+    
+    /* Check master_fd, for any readable data, restart shell 
+     * only when all data has been read
+     */
+
+    int epoll_fd;
+    struct epoll_event ev;
+    struct epoll_event ev_arr[1];
+
+    if ((epoll_fd = epoll_create (1)) == -1)
+        return TRUE;
+    
+    ev.events = EPOLLIN;
+    ev.data.fd = python_shell_data->master_fd;
+
+    if (epoll_ctl (epoll_fd, EPOLL_CTL_ADD, 
+        python_shell_data->master_fd, &ev) == -1)
+        return TRUE;
+    
+    if (epoll_wait (epoll_fd, ev_arr, 1, 0))
+        return TRUE;
+
+    gtk_text_buffer_append (buffer, RESTART_MSG, -1);
+
+    /* Executing new python shell process */
+    char *py_argv[] = {python_shell_path, NULL};
+    if (!execute_python_shell (NULL, py_argv))
+       return FALSE;
+
+    py_shell_state = PY_SHELL_STATE_SHELL;
+    return FALSE;
+}
+
 void
 shell_restart_shell_activate (GtkWidget *widget)
 {
@@ -465,18 +659,7 @@ shell_restart_shell_activate (GtkWidget *widget)
     /* Closing the current open shell */
     close_python_shell_process ();
     
-    gtk_text_buffer_insert_at_cursor (buffer, RESTART_MSG, -1);
-
-    /* Executing new python shell process */
-    /*char *py_argv[] = {python_shell_path, NULL};
-    if (!execute_python_shell (NULL, py_argv))
-       return;
-    
-    python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
-    g_io_add_watch (python_shell_data->channel, G_IO_IN,
-                   (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
-                
-    py_shell_state = PY_SHELL_STATE_SHELL;*/
+    g_timeout_add (10, (GSourceFunc)_shell_restart, NULL);
 }
 
 void
@@ -493,29 +676,41 @@ void
 debug_go_to_file_error_activate (GtkWidget *widget)
 {
     GtkTextBuffer *buffer =  GTK_TEXT_BUFFER (python_shell_source_buffer);
-    GtkTextIter start_iter, iter, end_iter;
+    GtkTextIter iter;
+    
+    gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
+    
+    gchar *text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter), FALSE);
 
-    if (!find_previous (GTK_TEXT_VIEW (python_shell_source_view),
-                    "Traceback", GTK_TEXT_SEARCH_TEXT_ONLY))
-        return;
-    
-    gtk_text_buffer_get_selection_bounds (buffer, &start_iter, &iter);
-    
-    if (!find_next (GTK_TEXT_VIEW (python_shell_source_view),
-                    ">>>", GTK_TEXT_SEARCH_TEXT_ONLY))
-        return;
-    
-    gtk_text_buffer_get_selection_bounds (buffer, &iter, &end_iter);
-    
-    gchar *text = gtk_text_buffer_get_text (buffer, &start_iter, &end_iter, TRUE);
-    printf ("text%s\n", text);
     GRegex *regex;
     GMatchInfo *match_info;
-    
-    regex = g_regex_new ("File\\b.+\\bline\\b.+", 0, 0, NULL);
+    gchar *file_path = NULL;
+    gint line = -1;
+
+    regex = g_regex_new ("\"+.+\"", 0, 0, NULL);
     if (g_regex_match (regex, text, 0, &match_info))
     {
-        printf ("ffff%s\n", g_match_info_fetch(match_info,0));
+        file_path = g_match_info_fetch (match_info, 0);
+        file_path = remove_char (file_path, '"');
+        file_path = remove_char (file_path, '"');
     }
     
+    g_match_info_free (match_info);
+    g_regex_unref (regex);
+
+    gchar *line_str;
+    regex = g_regex_new ("\\bline(.)+,", 0, 0, NULL);
+    if (g_regex_match (regex, text, 0, &match_info))
+    {
+        line_str = g_match_info_fetch (match_info, 0);
+        line_str = remove_char (line_str, ',');
+        gchar *p = g_strstr_len (line_str, -1, "line");
+        p += strlen("line");
+        p = g_strstrip (p);
+        
+        line = g_strtod (p, NULL);
+        g_free (line_str);
+    }
+    
+    go_to_file_at_line (file_path, line);
 }

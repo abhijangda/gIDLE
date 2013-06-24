@@ -11,6 +11,8 @@ file_new_tab_activate (GtkWidget *);
 void
 file_open_activate (GtkWidget *);
 void
+file_recent_menu_selection_done (GtkMenuShell *, GtkWidget *);
+void
 file_save_activate (GtkWidget *);
 void
 file_save_as_activate (GtkWidget *);

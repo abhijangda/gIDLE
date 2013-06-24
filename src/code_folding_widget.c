@@ -236,7 +236,9 @@ code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
     
     cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
     
-    cairo_rectangle(cr, 0, 0, gtk_widget_get_allocated_width (widget), gtk_widget_get_allocated_height (widget));
+    cairo_rectangle (cr, 0, 0, gtk_widget_get_allocated_width (widget),
+                    gtk_widget_get_allocated_height (widget));
+
     cairo_fill (cr); 
     
     cairo_set_line_width (cr, 0.5);

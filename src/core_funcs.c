@@ -1,4 +1,6 @@
 #include "core_funcs.h"
+#include "menus.h"
+
 #include <gtk/gtk.h>
 #include <string.h>
 #include <ctype.h>
@@ -50,10 +52,10 @@ gboolean
 open_file_at_index (char *file_path, int index)
 {
     gchar *file_str = get_file_data (file_path);
-    code_widget_array [index]->file_path = g_strdup (file_path);
     if (!file_str)
         return FALSE;
-
+    
+    code_widget_array [index]->file_path = g_strdup (file_path);
     codewidget_set_text (code_widget_array [index], file_str);
     code_widget_array [index]->file_mode = FILE_EXISTS;
     char *file_name = strrchr (file_path, '/');
@@ -223,6 +225,16 @@ gtk_text_buffer_get_selected_text (GtkTextBuffer *buffer)
     return gtk_text_buffer_get_text (buffer, &start, &end, TRUE);
 }
 
+/* To append text to GtkTextBuffer 
+ */
+void
+gtk_text_buffer_append (GtkTextBuffer *buffer, gchar *text, int len)
+{
+    GtkTextIter iter;
+    gtk_text_buffer_get_end_iter (buffer, &iter);
+    gtk_text_buffer_insert (buffer, &iter, text, len);
+}
+
 /* To get first open unmatched 
  * parenthesis position from reverse
  */
@@ -237,7 +249,7 @@ gtk_text_buffer_get_first_open_unmatched_parenthesis_pos (GtkTextBuffer *buffer,
     gtk_text_buffer_get_iter_at_offset (buffer, &iter, pos);
     line = gtk_text_iter_get_line (&iter);
     pos++;
-    line_text = gtk_text_buffer_get_line_text (buffer, line);
+    line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
     indentation = get_indent_spaces_in_string (line_text);
     /* Traverse each line upward, untill difference of numbers of open and closed
     *  brackets is equal to 1.
@@ -250,7 +262,7 @@ gtk_text_buffer_get_first_open_unmatched_parenthesis_pos (GtkTextBuffer *buffer,
         if (pos < 0)
         {
             g_free (line_text);
-            line_text = gtk_text_buffer_get_line_text (buffer, --line);
+            line_text = gtk_text_buffer_get_line_text (buffer, --line, TRUE);
             if (!line_text)
                 return -1;
             if (get_indent_spaces_in_string (line_text) < indentation)
@@ -271,6 +283,41 @@ gtk_text_buffer_get_first_open_unmatched_parenthesis_pos (GtkTextBuffer *buffer,
     g_free (line_text);
     printf ("pos%d\n", pos);
     return pos;
+}
+
+void
+go_to_file_at_line (gchar *file_path, gint line)
+{
+    int i;
+
+    for (i = 0; i<get_total_pages (); i++)
+    {
+        if (strcmp (code_widget_array [i]->file_path, file_path) == 0)
+            break;
+    }
+
+    if (i < get_total_pages ())
+    {
+        gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), i);
+        go_to_line (GTK_TEXT_VIEW (code_widget_array [i]->sourceview), line - 1);
+    }
+    else
+    {
+        file_new_tab_activate (NULL);
+        if (!open_file_at_index (file_path, get_total_pages () - 1))
+        {
+            gchar *message = g_strdup_printf ("Cannot open '%s'", file_path);
+            show_error_message_dialog (message);
+            g_free (message);
+            return;
+        }
+
+        gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook),
+                                       get_total_pages () - 1);
+        go_to_line (GTK_TEXT_VIEW (code_widget_array [get_total_pages () - 1]->sourceview), line - 1);
+    }
+
+    gtk_window_present (GTK_WINDOW (window));
 }
 
 /* To get matching paranthesis pos 
@@ -327,7 +374,7 @@ gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gc
     else
         return -1;
         
-    line_text = gtk_text_buffer_get_line_text (buffer, line);
+    line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
     
     while ((increase_pos && pos < strlen (line_text) && line_text [pos++] != bracket1)
            || (!increase_pos && pos >= 0 && line_text [pos--] != bracket1));
@@ -343,7 +390,7 @@ gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gc
             if (pos >= strlen (line_text))
             {
                 g_free (line_text);
-                line_text = gtk_text_buffer_get_line_text (buffer, ++line);
+                line_text = gtk_text_buffer_get_line_text (buffer, ++line, TRUE);
                 pos = 0;
             }
         }
@@ -353,7 +400,7 @@ gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gc
             if (pos < 0)
             {
                 g_free (line_text);
-                line_text = gtk_text_buffer_get_line_text (buffer, --line);
+                line_text = gtk_text_buffer_get_line_text (buffer, --line, TRUE);
                 pos = strlen (line_text);
             }
         }
@@ -499,17 +546,17 @@ remove_char (gchar *string, gchar c)
     --p;
     while (*++p)
          *p = *(p+1);
-    
+
      *--p = '\0';
     return string;
 }
 
 /* To get line text of line_index
- * with comments removed
+ * with comments and strings removed
  */
 
 gchar *
-gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index)
+gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index, gboolean strip_strings)
 {
     GtkTextIter start_iter, end_iter;
     if (line_index < 0)
@@ -517,15 +564,47 @@ gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index)
 
     gtk_text_buffer_get_iter_at_line (buffer, &start_iter, line_index);
     gtk_text_buffer_get_line_end_iter (buffer, &end_iter, line_index);
-    gchar *text = gtk_text_buffer_get_text (buffer, &start_iter, &end_iter, TRUE);
+    gchar *text = gtk_text_buffer_get_text (buffer, &start_iter, 
+                                           &end_iter, TRUE);
 
     char *hash_text = g_strrstr (text, "#");    
-    if (!hash_text)
-        return text;
-    text[hash_text - text] = '\0';
+    if (hash_text)
+        text[hash_text - text] = '\0';
+    
+    if (strip_strings)
+    {
+        text = remove_text_between_strings (text, "'", "'");
+        gchar *new_text = remove_text_between_strings (text, "\"", "\"");
+        g_free (text);
+        return new_text;
+    }
+
     return text;
 }
 
+/* To remove text between
+ * two characters
+ * Returns a newly allocated text
+ */
+gchar *
+remove_text_between_strings (gchar *text, gchar *start, gchar *end)
+{
+    gchar *p_start = g_strstr_len (text, -1, start);
+    gchar *p_end;
+    if (g_strcmp0 (start, end) == 0 && p_start - text > 0)
+        p_end = g_strstr_len (p_start+1, -1, end);
+    else
+        p_end = g_strstr_len (text, -1, end);
+    
+    if (!p_start || !p_end)
+        return g_strdup (text);
+    
+    GString *g_string = g_string_new (text);
+    g_string = g_string_erase (g_string, p_start - text, p_end - p_start);
+    gchar *ret_str = g_string->str;
+    g_string_free (g_string, FALSE);
+    return ret_str;
+}
 
 /* Add new 
  * CodeWidget

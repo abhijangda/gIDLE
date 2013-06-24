@@ -18,6 +18,9 @@ python_shell_destroy ();
 gboolean
 execute_python_shell (gchar *curr_dir, char *argv[]);
 
+gboolean
+read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data);
+
 void
 python_shell_text_view_append_output (gchar *text, gssize len);
 

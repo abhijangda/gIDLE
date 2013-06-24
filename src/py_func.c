@@ -87,7 +87,7 @@ py_func_get_definition (PyFunc *py_func)
     gchar *def = g_strjoin ("", "def", py_func->name, "(", argv_str, ")",
                            NULL);
     g_free (argv_str);
-    return def;    
+    return def;
 }
 
 /*Duplicate PyFunc
@@ -167,6 +167,9 @@ void
 py_funcv_destroy (PyFunc **py_funcv)
 {
     PyFunc **p = py_funcv;
+    if (!p)
+        return;
+
     int size  = 1;
     while (*p != NULL)
     {

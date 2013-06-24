@@ -29,6 +29,9 @@ py_class_destroy (PyClass *py_class);
 void
 py_classv_add_py_class (PyClass ***py_class_array, int *size, PyClass *py_class);
 
+gchar **
+py_class_get_func_defs (PyClass *py_class);
+
 void
 convert_py_class_array_to_nested_class_array (PyClass ***py_classv,
                                              int *py_classvsize, PyClass **prev_py_classv,

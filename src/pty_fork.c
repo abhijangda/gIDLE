@@ -51,7 +51,6 @@ gboolean
 ptyFork (ChildProcessData *python_shell_data, GError **error)
 {
     int mfd, slaveFd, savedErrno;
-    char *p;
 
     mfd = posix_openpt (O_RDWR | O_NOCTTY | O_NONBLOCK);     
     grantpt (mfd);
@@ -59,6 +58,8 @@ ptyFork (ChildProcessData *python_shell_data, GError **error)
 
     python_shell_data->master_fd = mfd;
     python_shell_data->slave_name = g_strdup (ptsname (mfd));
+    python_shell_data->sh_argv = g_malloc0 (sizeof (gchar *));
+    python_shell_data->sh_argv[0] = g_strdup ("/bin/sh");
 
     /*if (!g_spawn_async (python_shell_data->current_dir, python_shell_data->argv, NULL, 0, 
                        child_func, (gpointer)python_shell_data, 
@@ -69,9 +70,8 @@ ptyFork (ChildProcessData *python_shell_data, GError **error)
     pid_t childPid = fork ();
     if (childPid == 0)
     {
-        gtk_main_quit ();
         child_func ((gpointer)python_shell_data);
-        execv (python_shell_data->argv [0], python_shell_data->argv);
+        execv (python_shell_data->sh_argv [0], python_shell_data->sh_argv);
     }
     python_shell_data->pid = childPid;
     return TRUE;

@@ -4,6 +4,7 @@
 #include <string.h>
 
 extern GtkWidget *status_bar;
+extern char *font_name;
 
 static void
 codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text);
@@ -28,6 +29,9 @@ codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
 
 static void
 codewidget_draw (GtkWidget *widget, cairo_t *cr, gpointer data);
+
+static void
+_codewidget_move_cursor_to_screen (CodeWidget *codewidget);
 
 static gboolean can_combo_func_activate = TRUE;
 static gboolean can_combo_class_activate = TRUE;
@@ -83,7 +87,8 @@ CodeWidget *
 codewidget_new ()
 {
     CodeWidget *codewidget = g_malloc0 (sizeof (CodeWidget));
-    
+    PangoFontDescription *font_desc;
+
     codewidget->hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
     codewidget->vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     codewidget->scrollwin = gtk_scrolled_window_new (NULL, NULL);
@@ -115,6 +120,11 @@ codewidget_new ()
                      G_CALLBACK (codewidget_delete_range), codewidget);
     
     codewidget->sourceview = gtk_source_view_new_with_buffer (codewidget->sourcebuffer);
+ 
+    /*Set default font*/
+    font_desc = pango_font_description_from_string (font_name);
+    gtk_widget_modify_font (codewidget->sourceview, font_desc);
+    pango_font_description_free (font_desc);
 
     g_signal_connect (G_OBJECT (codewidget->sourceview), "key-press-event",
                      G_CALLBACK (codewidget_key_press), NULL); 
@@ -309,22 +319,31 @@ codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
 void
 codewidget_mark_set (GtkTextBuffer *buffer, GtkTextIter *iter, GtkTextMark *mark, gpointer data)
 {
-    GtkTextIter current_iter;
+    GtkTextIter current_iter, start_bound_iter, end_bound_iter;
     gtk_text_buffer_get_iter_at_mark (buffer, &current_iter, gtk_text_buffer_get_insert (buffer));
 
     int chars = gtk_text_iter_get_offset (&current_iter);
     int col = gtk_text_iter_get_line_offset (&current_iter);
     int line = gtk_text_iter_get_line (&current_iter);
     int first_line = -1, last_line = -1;
+    
+    GdkRectangle visible_rect;
+    CodeWidget *codewidget = (CodeWidget *)data;
 
     gchar *status_bar_msg;
     asprintf (&status_bar_msg, "Chars %d Col %d Line %d", chars+1, col+1, line+1);
     gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, status_bar_msg);
 
-    CodeWidget *codewidget = (CodeWidget *)data;
-
     if (line != codewidget->prev_line)
     {
+        _codewidget_move_cursor_to_screen (codewidget);
+        
+        if (gtk_text_buffer_get_has_selection (buffer))
+        {
+            codewidget->prev_line = -1;
+            return;
+        }
+
         //printf ("line %d\n", line);
         int func, class;
         line_history_push (codewidget->line_history, line);
@@ -362,15 +381,44 @@ codewidget_mark_set (GtkTextBuffer *buffer, GtkTextIter *iter, GtkTextMark *mark
                                                  func);
                 }
                 else
-                {
                     gtk_combo_box_set_active (GTK_COMBO_BOX (codewidget->func_combobox), -1);
-                }
+
             }
+
             can_combo_func_activate = TRUE;
             can_combo_class_activate = TRUE;
         }
     }
+    
     codewidget->prev_line = line;
+}
+
+static void
+_codewidget_move_cursor_to_screen (CodeWidget *codewidget)
+{
+    if (!GTK_IS_TEXT_VIEW (codewidget->sourceview))
+        return;
+    
+    GdkRectangle visible_rect;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (codewidget->sourceview));
+    GtkTextIter current_iter, start_bound_iter, end_bound_iter;
+    
+    gtk_text_buffer_get_iter_at_mark (buffer, &current_iter, gtk_text_buffer_get_insert (buffer));
+    
+    int line = gtk_text_iter_get_line (&current_iter);
+    
+    gtk_text_view_get_visible_rect (GTK_TEXT_VIEW (codewidget->sourceview),
+                                    &visible_rect);
+     gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (codewidget->sourceview),
+                                       &start_bound_iter, visible_rect.x, visible_rect.y);
+    
+    gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (codewidget->sourceview),
+                                       &end_bound_iter, visible_rect.x, visible_rect.y + visible_rect.height);
+    
+    if (gtk_text_iter_get_line (&start_bound_iter) > line || 
+        line > gtk_text_iter_get_line (&end_bound_iter))
+        gtk_text_view_scroll_to_iter (GTK_TEXT_VIEW (codewidget->sourceview),
+                                     &current_iter, 0.0, FALSE, 0, 0);
 }
 
 /* Handler for SourceView
@@ -465,6 +513,9 @@ codewidget_set_text (CodeWidget *codewidget, gchar *text)
     gtk_text_buffer_set_text (gtk_text_view_get_buffer (GTK_TEXT_VIEW (codewidget->sourceview)),
                                 text, -1);  
     
+    while (gtk_events_pending ())
+        gtk_main_iteration_do (FALSE);
+
     GtkTextIter start_iter;
     gtk_text_buffer_get_start_iter (gtk_text_view_get_buffer (GTK_TEXT_VIEW (codewidget->sourceview)),
                                    &start_iter);
@@ -496,6 +547,47 @@ print_nested_array (PyClass **py_classv, int index, int size)
 }
 
 
+void
+codewidget_update_class_funcs (CodeWidget *codewidget)
+{
+    gchar *code_widget_str;
+    GtkTextBuffer *text_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (
+                                                                    codewidget->sourceview));
+    GtkTextIter start_iter, end_iter;
+    
+    gtk_text_buffer_get_start_iter (text_buffer, &start_iter);
+    gtk_text_buffer_get_end_iter (text_buffer, &end_iter);
+    
+    code_widget_str = gtk_text_buffer_get_text (text_buffer, &start_iter,
+                                                                                  &end_iter, TRUE);
+    int i;
+    for (i = 1; i < codewidget->py_class_array_size; i++)
+        py_class_destroy (codewidget->py_class_array [i]);
+    
+    //g_free (codewidget->py_class_array);
+    //g_free (codewidget->py_nested_class_array);
+    
+    for (i = codewidget->py_class_array_size; i > 0; i--)
+        gtk_combo_box_text_remove (GTK_COMBO_BOX_TEXT (codewidget->class_combobox), i);
+
+    codewidget->py_class_array_size = 1;
+    codewidget->py_nested_class_array_size = 1;
+    
+    codewidget_get_class_funcs (codewidget, code_widget_str);
+}
+
+static gboolean
+is_pos_in_array (int start, int end, int **array, int array_size)
+{
+    int i;
+    for (i = 0; i <array_size; i++)
+    {
+        if (array [i][0] <= start && array[i][1] >= end)
+             return TRUE;
+    }
+    return FALSE;
+}
+
 /*Get classes and functions 
  * of current codewidget
  */
@@ -503,10 +595,120 @@ print_nested_array (PyClass **py_classv, int index, int size)
 static void
 codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
 {
-    GRegex *regex_class,*regex_func;
+    GRegex *regex_class, *regex_comments, *regex_func;
+    GRegex *regex_str, *regex_mutlistr;
     GMatchInfo *match_info_class,*match_info_func;
+    GMatchInfo *match_info_comments, *match_info_str, *match_info_mutlistr;
     int indentation=0, start, end;
+    int **str_comments_pos = NULL, str_comments_pos_size = 0;
     
+    /*Find all the comments and add to str_comments_pos*/
+    regex_comments = g_regex_new ("#+.+", 0, 0, NULL);
+    
+    if (g_regex_match (regex_comments, text, 0, &match_info_comments))
+    {
+        do
+        {
+            str_comments_pos = g_realloc (str_comments_pos, 
+                                          sizeof (int *) * (str_comments_pos_size + 1));
+            str_comments_pos [str_comments_pos_size] = g_malloc (sizeof (int) *2);
+
+            g_match_info_fetch_pos (match_info_comments, 0, 
+                                   &(str_comments_pos [str_comments_pos_size][0]) , 
+                                   &(str_comments_pos [str_comments_pos_size][1]));
+
+            g_match_info_next (match_info_comments, NULL);
+            str_comments_pos_size++;
+        }
+        while (g_match_info_matches (match_info_comments));
+    }
+    
+    g_match_info_free (match_info_comments);
+    g_regex_unref (regex_comments);
+    
+    /* Find all the strings*/
+    regex_str = g_regex_new ("['\"][^'\"]*.+['\"]", 0, 0, NULL);
+    
+    if (g_regex_match (regex_str, text, 0, &match_info_str))
+    {
+        do
+        {
+            str_comments_pos = g_realloc (str_comments_pos, 
+                                          sizeof (int *) * (str_comments_pos_size + 1));
+            str_comments_pos [str_comments_pos_size] = g_malloc (sizeof (int) *2);
+
+            g_match_info_fetch_pos (match_info_str, 0, 
+                                   &(str_comments_pos [str_comments_pos_size][0]) , 
+                                   &(str_comments_pos [str_comments_pos_size][1]));
+
+            g_match_info_next (match_info_str, NULL);
+            str_comments_pos_size++;
+        }
+        while (g_match_info_matches (match_info_str));
+    }
+    int i;
+    for (i = 0; i <str_comments_pos_size; i++)
+    {
+        printf ("%d %d\n", str_comments_pos [i][0], str_comments_pos[i][1]);
+    }
+    
+    g_match_info_free (match_info_str);
+    g_regex_unref (regex_str);
+    
+    /* Find all the multiline strings with single quotes*/
+    regex_str = g_regex_new ("'''.+?'''", G_REGEX_DOTALL, 0, NULL);
+    
+    if (g_regex_match (regex_str, text, 0, &match_info_str))
+    {
+        do
+        {
+            str_comments_pos = g_realloc (str_comments_pos, 
+                                          sizeof (int *) * (str_comments_pos_size + 1));
+            str_comments_pos [str_comments_pos_size] = g_malloc (sizeof (int) *2);
+
+            g_match_info_fetch_pos (match_info_str, 0, 
+                                   &(str_comments_pos [str_comments_pos_size][0]) , 
+                                   &(str_comments_pos [str_comments_pos_size][1]));
+
+            g_match_info_next (match_info_str, NULL);
+            str_comments_pos_size++;
+        }
+        while (g_match_info_matches (match_info_str));
+    }
+    
+    g_match_info_free (match_info_str);
+    g_regex_unref (regex_str);
+    
+    /* Find all the multiline strings with double quotes*/
+    regex_str = g_regex_new ("\"\"\".+?\"\"\"", G_REGEX_DOTALL, 0, NULL);
+    
+    if (g_regex_match (regex_str, text, 0, &match_info_str))
+    {
+        do
+        {
+            str_comments_pos = g_realloc (str_comments_pos, 
+                                          sizeof (int *) * (str_comments_pos_size + 1));
+            str_comments_pos [str_comments_pos_size] = g_malloc (sizeof (int) *2);
+
+            g_match_info_fetch_pos (match_info_str, 0, 
+                                   &(str_comments_pos [str_comments_pos_size][0]) , 
+                                   &(str_comments_pos [str_comments_pos_size][1]));
+
+            g_match_info_next (match_info_str, NULL);
+            str_comments_pos_size++;
+        }
+        while (g_match_info_matches (match_info_str));
+    }
+    
+    g_match_info_free (match_info_str);
+    g_regex_unref (regex_str);
+
+    /*int i;
+    for (i = 0; i <str_comments_pos_size; i++)
+    {
+        printf ("%d %d\n", str_comments_pos [i][0], str_comments_pos[i][1]);
+    }*/
+
     /*getting class names and their positions*/
     regex_class = g_regex_new ("[ \\ \\t]*\\bclass\\b\\s*\\w+\\s*\\(*.*\\)*:", 0, 0, NULL);
     
@@ -515,17 +717,26 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
         int class = 1;
         do
         {
-            gchar *class_def_string = g_match_info_fetch(match_info_class,0);
+            g_match_info_fetch_pos (match_info_class, 0, &start, &end);
             
+            /* If found class lies in between comments or strings then continue*/
+            if (is_pos_in_array (start, end, str_comments_pos, 
+                                str_comments_pos_size))
+            {
+                g_match_info_next (match_info_class, NULL);
+                continue;
+            }
+
+            gchar *class_def_string = g_match_info_fetch(match_info_class,0);
+
             class_def_string = remove_char (class_def_string, ':');
             indentation = get_indent_spaces_in_string (class_def_string) / indent_width;
-            g_match_info_fetch_pos (match_info_class, 0, &start, &end);
             codewidget_add_class (codewidget,
                                              py_class_new_from_def (class_def_string,
                                              start, indentation));
             g_free (class_def_string);
             g_match_info_next (match_info_class, NULL);
-            printf ("class %s\n", codewidget->py_class_array [class]->name);
+            //printf ("class %d\n",class);// codewidget->py_class_array [class]->name);
             /*Adding to combo_class*/
             gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (codewidget->class_combobox),
                                            codewidget->py_class_array [class]->name);
@@ -537,16 +748,25 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
     g_match_info_free (match_info_class);
     g_regex_unref (regex_class);
     
-    regex_func = g_regex_new ("([ \\ \\t]*\\bdef\\b\\s*.+)\\:", 0, 0, NULL); 
+    regex_func = g_regex_new ("[ \\ \\t]*def\\s+[\\w\\d_]+\\s*\\(.+\\)\\:", 0, 0, NULL); 
     
     if (g_regex_match (regex_func, text ,0, &match_info_func))
     {
         do
         {
+            g_match_info_fetch_pos (match_info_func, 0, &start, &end);
             gchar *func_def_string = g_match_info_fetch(match_info_func,0);
+
+            /* If found function lies in between comments or strings then continue*/
+            if (is_pos_in_array (start, end, str_comments_pos, 
+                                str_comments_pos_size))
+            {
+                g_match_info_next (match_info_func, NULL);
+                continue;
+            }
+
             func_def_string = remove_char (func_def_string, ':');
             indentation = get_indent_spaces_in_string (func_def_string) / indent_width;
-            g_match_info_fetch_pos (match_info_func, 0, &start, &end);
             PyFunc *py_func = py_func_new_from_def (func_def_string, start,
                                                    indentation);
 
@@ -587,6 +807,24 @@ codewidget_get_class_funcs (CodeWidget *codewidget, gchar *text)
                                                   codewidget->py_class_array,
                                                   codewidget->py_class_array_size,
                                                   0);
+    
+    /*Set Class and Function according to current position of cursor*/
+    GtkTextIter current_iter;
+    if (!GTK_IS_TEXT_VIEW (codewidget->sourceview))
+         return;
+
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (codewidget->sourceview));
+    if (!buffer)
+        return;
+
+    gtk_text_buffer_get_iter_at_mark (buffer, &current_iter, gtk_text_buffer_get_insert (buffer));
+    if (gtk_text_iter_get_line (&current_iter) == 0)
+        return;
+
+    gtk_text_buffer_get_iter_at_line (buffer, &current_iter,
+                                        gtk_text_iter_get_line (&current_iter)-1);
+    gtk_text_buffer_place_cursor (buffer, &current_iter);
+    codewidget_mark_set (buffer, &current_iter, NULL, codewidget);
 }
 
 /*Called when func_combobox
@@ -627,7 +865,12 @@ codewidget_class_combo_changed (GtkComboBox *combobox, gpointer data)
     gtk_combo_box_text_remove_all (GTK_COMBO_BOX_TEXT (codewidget->func_combobox));
     
     if (codewidget->py_class_array [index]->py_func_array == NULL)
+    {
+        if (can_combo_class_activate)
+            go_to_pos_and_select_line (GTK_TEXT_VIEW (codewidget->sourceview),
+                                 codewidget->py_class_array [index]->pos);
         return;
+    }
 
     can_combo_func_activate = FALSE;
     int i = 0;
@@ -656,7 +899,8 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
     GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (widget));
     int indentation, i, col, new_col, line, pos;
     gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
-    gchar *line_text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter));
+    gchar *line_text = gtk_text_buffer_get_line_text (buffer, 
+                                                       gtk_text_iter_get_line (&iter), TRUE);
     col = gtk_text_iter_get_line_offset (&iter);
     line = gtk_text_iter_get_line (&iter);
     pos = gtk_text_iter_get_offset (&iter);
@@ -685,7 +929,7 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
         case GDK_KEY_Left:
             indentation = get_indent_spaces_in_string (line_text);
             
-            if (col > indentation)
+            if (col > indentation || col == 0)
                 return FALSE;
                 
             if (col % indent_width == 0)
@@ -703,7 +947,7 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
             if (indentation == 0)
                 return FALSE;
 
-            if (col > indentation)
+            if (col > indentation || col == 0)
                 return FALSE;
                 
             if (col % indent_width == 0)
@@ -728,6 +972,11 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
            gtk_text_buffer_place_cursor (buffer, &new_iter);
             
             return TRUE;
+    }
+    
+    if (event->key.keyval == GDK_KEY_KP_Decimal)
+    {
+        
     }
     return FALSE;
 }

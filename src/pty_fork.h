@@ -24,6 +24,7 @@ struct child_func_data
     GIOChannel *channel;
     char **argv;
     char *current_dir;
+    char **sh_argv;
 };
 
 typedef struct child_func_data ChildProcessData;

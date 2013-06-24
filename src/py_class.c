@@ -28,6 +28,7 @@ PyClass *
 py_class_new_from_def (gchar *def_string, gdouble pos,  int indentation)
 {
     gchar *class = g_strstr_len (def_string, -1, "class");
+
     if (!class)
         return NULL;
     
@@ -37,16 +38,15 @@ py_class_new_from_def (gchar *def_string, gdouble pos,  int indentation)
         open_bracket = &def_string [strlen (def_string) - 1];
 
     //Copying only class_name
-    int len = strlen (class) - strlen (open_bracket);
-
+    int len = strlen (class) - strlen (open_bracket) + 1;
     gchar *name = g_malloc0 (sizeof (gchar) * len);
+
     gchar *n = name;
     gchar *i = class-1;
     while (++i != open_bracket)
          *n++ = *i;
 
     g_strstrip (name);
-    
     //Stripping arguments and remove brackets
     gchar **base_classv = g_strsplit (open_bracket, ",", 0); 
     gchar **p = base_classv;
@@ -62,6 +62,24 @@ py_class_new_from_def (gchar *def_string, gdouble pos,  int indentation)
     g_free (name);
     g_strfreev (base_classv);
     return py_class;
+}
+
+gchar **
+py_class_get_func_defs (PyClass *py_class)
+{
+    /*gchar **func_defs = NULL;
+    if (py_class->py_func_array == NULL)
+        return func_defs;
+    
+    int i = -1;
+    while (py_class->py_func_array [++i])
+    {
+        func_defs = g_realloc(func_defs, (i+1)*sizeof (gchar *));
+        func_defs [i] = def;
+    }
+
+    func_defs = g_realloc(func_defs, (i+1)*sizeof (gchar *));
+    func_defs [i] = NULL;*/
 }
 
 /* Add py_class to 

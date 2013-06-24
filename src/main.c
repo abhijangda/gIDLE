@@ -1,6 +1,7 @@
 #include "main.h"
 #include "menus.h"
 #include "toolbar.h"
+#include "python_shell.h"
 
 static gboolean
 delete_event (GtkWidget *widget, GdkEvent *event);
@@ -11,13 +12,28 @@ GtkBuilder *builder;
 extern gchar *search_text;
 GtkWidget *status_bar;
 ChildProcessData *python_shell_data;
+gboolean bash_loaded;
+char *font_name;
 
 int
 main (int argc, char *argv [])
-{    
+{
+    GError *error  = NULL;
+    
+    python_shell_data = g_try_malloc (sizeof (ChildProcessData));
+    python_shell_data->argv = NULL;
+    python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
+    python_shell_data->current_dir = NULL;
+    
+    bash_loaded = ptyFork (python_shell_data, &error);
+
     GtkWidget *navigate_bookmarks;
     
     gtk_init (&argc, &argv);
+    
+    python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
+    g_io_add_watch (python_shell_data->channel, G_IO_IN,
+                   (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
 
     builder = gtk_builder_new ();
     gtk_builder_add_from_file (builder, "./ui/main.ui", NULL);
@@ -33,15 +49,20 @@ main (int argc, char *argv [])
 
     gtk_menu_item_set_submenu (GTK_MENU_ITEM (navigate_bookmarks),
                               bookmarks_menu);
-
+    
+    GtkAccelGroup *accelgroup = GTK_ACCEL_GROUP (gtk_builder_get_object (builder,
+                                                                       "accelgroup"));
+    
     /*Connecting menu item's signals*/ 
     //For File Menu
     g_signal_connect (gtk_builder_get_object (builder, "file_new"), "activate",
-                                   G_CALLBACK (file_new_activate), NULL);
+                      G_CALLBACK (file_new_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_new_tab"), "activate",
-                                   G_CALLBACK (file_new_tab_activate), NULL);
+                      G_CALLBACK (file_new_tab_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_open"), "activate",
-                                   G_CALLBACK (file_open_activate), NULL);
+                      G_CALLBACK (file_open_activate), NULL);
+    g_signal_connect (gtk_builder_get_object (builder, "recentchoosermenu"), "selection-done",
+                      G_CALLBACK (file_recent_menu_selection_done), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_save"), "activate",
                                    G_CALLBACK (file_save_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_save_as"), "activate",
@@ -53,9 +74,9 @@ main (int argc, char *argv [])
     g_signal_connect (gtk_builder_get_object (builder, "file_close_tab"), "activate",
                                    G_CALLBACK (file_close_tab_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_close_all_tabs"), "activate",
-                                   G_CALLBACK (file_close_all_tabs_activate), NULL);
+                      G_CALLBACK (file_close_all_tabs_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "file_quit"), "activate",
-                                   G_CALLBACK (file_quit_activate), NULL);
+                      G_CALLBACK (file_quit_activate), NULL);
     
     //For Edit Menu           
     g_signal_connect (gtk_builder_get_object (builder, "edit_undo"), "activate",
@@ -90,12 +111,28 @@ main (int argc, char *argv [])
     //For Format Menu
     g_signal_connect (gtk_builder_get_object (builder, "format_inc_indent"), "activate",
                                    G_CALLBACK (format_inc_indent_activate), NULL);
+    gtk_widget_add_accelerator (GTK_WIDGET (gtk_builder_get_object (builder, "format_inc_indent")),
+                               "activate", accelgroup, GDK_KEY_bracketright, 
+                                GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
     g_signal_connect (gtk_builder_get_object (builder, "format_dec_indent"), "activate",
                                    G_CALLBACK (format_dec_indent_activate), NULL);
+    gtk_widget_add_accelerator (GTK_WIDGET (gtk_builder_get_object (builder, "format_dec_indent")),
+                               "activate", accelgroup, GDK_KEY_bracketleft, 
+                                GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
     g_signal_connect (gtk_builder_get_object (builder, "format_comment_out"), "activate",
                                    G_CALLBACK (format_comment_out_activate), NULL);
+    gtk_widget_add_accelerator (GTK_WIDGET (gtk_builder_get_object (builder, "format_comment_out")),
+                               "activate", accelgroup, GDK_KEY_3, 
+                                GDK_MOD1_MASK, GTK_ACCEL_VISIBLE);
+
     g_signal_connect (gtk_builder_get_object (builder, "format_uncomment_out"), "activate",
                                    G_CALLBACK (format_uncomment_out_activate), NULL);
+    gtk_widget_add_accelerator (GTK_WIDGET (gtk_builder_get_object (builder, "format_uncomment_out")),
+                               "activate", accelgroup, GDK_KEY_4, 
+                                GDK_MOD1_MASK, GTK_ACCEL_VISIBLE);
+
     g_signal_connect (gtk_builder_get_object (builder, "format_tabify_region"), "activate",
                                    G_CALLBACK (format_tabify_region_activate), NULL);
     g_signal_connect (gtk_builder_get_object (builder, "format_untabify_region"), "activate",
@@ -265,22 +302,20 @@ main (int argc, char *argv [])
     line_history_menu = gtk_menu_new ();
     gtk_menu_item_set_submenu (GTK_MENU_ITEM (gtk_builder_get_object (builder, "navigate_line_history")),
                               line_history_menu);
+    
+    GtkRecentFilter *py_recent_filter = gtk_recent_filter_new ();
+    gtk_recent_filter_set_name (py_recent_filter, "Python Files");
+    gtk_recent_filter_add_pattern (py_recent_filter, "*.py");
 
+    gtk_recent_chooser_add_filter (GTK_RECENT_CHOOSER (gtk_builder_get_object (builder, "recentchoosermenu")),
+                                  py_recent_filter);
+    
     /* Connecting window's signals and events */
     g_signal_connect (window, "delete-event",
                       G_CALLBACK (delete_event), NULL);
     g_signal_connect (window, "destroy",
                       G_CALLBACK (main_window_destroy), NULL);
     /********************************/
-
-    //Creating code_widget_array
-    code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
-    code_widget_array [0] = codewidget_new ();
-    code_widget_array_size = 1;
-    
-    notebook = gtk_builder_get_object (builder, "notebook");
-    gtk_notebook_append_page (GTK_NOTEBOOK (notebook), code_widget_array [0]->vbox,
-                                                     gtk_label_new ("New File"));
     
     /*Loading Options*/
     indent_width = 4;
@@ -297,8 +332,27 @@ main (int argc, char *argv [])
     is_code_folding = TRUE;
     show_line_numbers = TRUE;
     python_shell_path = "/usr/bin/python";
+    font_name = "Monospace";
     /*************/
+
+    //Creating code_widget_array
+    code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
+    code_widget_array [0] = codewidget_new ();
+    code_widget_array_size = 1;
     
+    notebook = gtk_builder_get_object (builder, "notebook");
+    gtk_notebook_append_page (GTK_NOTEBOOK (notebook), code_widget_array [0]->vbox,
+                                                     gtk_label_new ("New File"));
+    /*If bash is not loaded*/
+    if (!bash_loaded)
+    {
+        gchar *msg = g_strdup_printf ("Cannot run Python Shell (%s)", error->message);
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, msg);
+        g_free (msg);
+        g_error_free (error);
+    }
+    /****************/
+
     gtk_window_maximize (GTK_WINDOW (window));
     gtk_widget_show_all (GTK_WIDGET (window));
     gtk_main ();
@@ -306,7 +360,7 @@ main (int argc, char *argv [])
 }
 
 /* "delete-event" handler for
- * window
+ * windowstatic gboolean can_read_to_text_view;
  */
 static gboolean
 delete_event (GtkWidget *widget, GdkEvent *event)
@@ -390,11 +444,7 @@ delete_event (GtkWidget *widget, GdkEvent *event)
 static void
 main_window_destroy (GtkWidget *widget)
 {
-    int i;
-
-    for (i = 0; i < code_widget_array_size; i++)
-        codewidget_destroy (code_widget_array [i]);
-    
-    g_free (code_widget_array);
+    remove_all_code_widgets ();
+    kill (python_shell_data->pid, SIGKILL);
     g_free (python_shell_data);
 }

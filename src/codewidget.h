@@ -58,4 +58,7 @@ codewidget_set_text (CodeWidget *, gchar *text);
 
 void
 codewidget_add_class (CodeWidget *, PyClass *);
+
+void
+codewidget_update_class_funcs (CodeWidget *);
 #endif /*CODEWIDGET_H*/

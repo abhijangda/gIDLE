@@ -10,6 +10,9 @@ int
 get_total_pages ();
 
 gchar *
+remove_text_between_strings (gchar *text, gchar *start, gchar *end);
+
+gchar *
 get_file_data (char *file_path);
 
 gboolean
@@ -37,6 +40,9 @@ int
 str_count_str (gchar *str1, gchar *str2);
 
 void
+gtk_text_buffer_append (GtkTextBuffer *buffer, gchar *text, int len);
+
+void
 gtk_text_buffer_get_line_end_iter (GtkTextBuffer *buffer, GtkTextIter *iter, int line_index);
 
 gdouble
@@ -46,7 +52,7 @@ gint
 gtk_text_buffer_get_first_unmatched_parenthesis_pos (GtkTextBuffer *buffer, gint pos);
 
 gchar *
-gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index);
+gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index, gboolean strip_strings);
 
 gchar *
 gtk_text_buffer_get_selected_text (GtkTextBuffer *buffer);
@@ -56,6 +62,9 @@ find_next (GtkTextView *text_view, const gchar *text, GtkTextSearchFlags flags);
 
 gboolean
 find_previous (GtkTextView *text_view, const gchar *text, GtkTextSearchFlags flags);
+
+void
+go_to_file_at_line (gchar *file_path, gint line);
 
 void
 go_to_line (GtkTextView *view, int line);

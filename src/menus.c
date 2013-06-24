@@ -17,6 +17,7 @@
 extern gchar *search_text;
 extern GtkWidget *status_bar;
 extern ChildProcessData *python_shell_data;
+extern GtkWidget *python_shell_win;
 
 void
 file_new_activate (GtkWidget *widget)
@@ -60,6 +61,8 @@ file_new_tab_activate (GtkWidget *widget)
                                                      code_widget_array [code_widget_array_size-1]->vbox,
                                                      gtk_label_new ("New File"));    
     gtk_widget_show_all (GTK_WIDGET (notebook));
+    gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook),
+                                  gtk_notebook_get_n_pages(GTK_NOTEBOOK (notebook)) -1);
 }
 
 /*To open a 
@@ -70,25 +73,9 @@ void
 file_open_activate (GtkWidget *widget)
 {
     if (get_current_index () == -1)
-        return;
+        file_new_tab_activate (NULL);
         
-    //Check if file has modified since last save
-    if (is_file_modified (get_current_index ()))
-    {
-        GtkWidget *dialog;
-        dialog = gtk_message_dialog_new (GTK_WINDOW (window),
-                                        GTK_DIALOG_DESTROY_WITH_PARENT, 
-                                        GTK_MESSAGE_QUESTION,
-                                        GTK_BUTTONS_YES_NO,
-                                        "Current file is modified, since last saved. Do you still want to open a new file?");
-        if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_NO)
-        {
-            gtk_widget_destroy (dialog);
-            return;
-        }
-        gtk_widget_destroy (dialog);
-    }
-    
+    /* Check if file has modified since last save */    
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File", GTK_WINDOW (window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
                                                      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
@@ -101,13 +88,82 @@ file_open_activate (GtkWidget *widget)
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
         char *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-        if (!open_file_at_index (filename, get_current_index ()))
+        int index = get_current_index ();
+        if (code_widget_array [index]->file_path != NULL ||
+           strcmp (get_text_at_index (index), "") != 0 )
+            file_new_tab_activate (NULL);
+
+        index = get_current_index ();
+
+        if (!open_file_at_index (filename, index))
+        {
             //Error Cannot open
-            show_error_message_dialog ("Cannot open to file!");
+            show_error_message_dialog ("Cannot open file!");
+            gtk_widget_destroy (dialog);
+            return;
+        }
         
+        while (gtk_events_pending ())
+            gtk_main_iteration_do (FALSE);
+
         gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Loaded");
+
+        gchar *uri = g_filename_to_uri (filename, NULL, NULL);
+        if (!uri)
+        {
+            gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, 
+                               "File Loaded but cannot get its URI");
+            gtk_widget_destroy (dialog);
+            return;
+        }
+
+        GtkRecentManager *recent_manager = gtk_recent_manager_get_default ();
+        if (!gtk_recent_manager_add_item (recent_manager, uri))
+            gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0,
+                                "File Loaded but cannot add it to recent files");
+        
+        g_free (uri);
     }
     gtk_widget_destroy (dialog);
+}
+
+/* Called, when item is selected
+ * from recent chooser menu
+ */
+void
+file_recent_menu_selection_done (GtkMenuShell *menu_shell, GtkWidget *item)
+{
+    gchar *uri = gtk_recent_chooser_get_current_uri (GTK_RECENT_CHOOSER (menu_shell));
+    gchar *filename;
+    if (!uri)
+        return;
+    
+    filename = g_filename_from_uri (uri, NULL, NULL);
+    if (!filename)
+        return;
+
+    int index = get_current_index ();
+    if (index == -1)
+        file_new_tab_activate (NULL);
+    
+    index = get_current_index ();
+    if (code_widget_array [index]->file_path != NULL ||
+       strcmp (get_text_at_index (index), "") != 0 )
+       file_new_tab_activate (NULL);
+
+    index = get_current_index ();
+
+    if (!open_file_at_index (filename, index))
+    {
+        //Error Cannot open
+        show_error_message_dialog ("Cannot open file!");
+        g_free (filename);
+        g_free (uri);
+        return;
+    }
+
+    g_free (filename);
+    g_free (uri);
 }
 
 /* To save
@@ -118,14 +174,15 @@ file_save_activate (GtkWidget *widget)
 {
     if (get_current_index () == -1)
         return;
-        
+    
+    gchar *contents = get_text_at_index (get_current_index ());
+
     if (code_widget_array [get_current_index ()]->file_mode == FILE_NEW)
     {
         file_save_as_activate (widget);
     }
     else
     {
-        gchar *contents = get_text_at_index (get_current_index ());
         GtkTextIter end_iter;
         gtk_text_buffer_get_end_iter (GTK_TEXT_BUFFER (code_widget_array[get_current_index ()]->sourcebuffer),
                                      &end_iter);
@@ -133,10 +190,12 @@ file_save_activate (GtkWidget *widget)
                             contents, gtk_text_iter_get_offset (&end_iter)))
         {
             //Error cannot save
-            show_error_message_dialog ("Cannot save to file!");
+            show_error_message_dialog ("Cannot save file!");
             return;
         }
     }
+
+    codewidget_update_class_funcs (code_widget_array[get_current_index ()]);
     gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");
 }
 
@@ -161,9 +220,9 @@ file_save_as_activate (GtkWidget *widget)
     
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
-        char *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+        char *file_path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
 
-        code_widget_array [get_current_index ()]->file_path = g_strdup (filename);
+        code_widget_array [get_current_index ()]->file_path = g_strdup (file_path);
         
         gchar *contents = get_text_at_index (get_current_index ());
         GtkTextIter end_iter;
@@ -178,7 +237,24 @@ file_save_as_activate (GtkWidget *widget)
         }
         gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");           
         code_widget_array [get_current_index ()]->file_mode = FILE_EXISTS;
-        g_free (filename);
+
+        char *file_name = strrchr (file_path, '/');
+        file_name++;
+        gtk_notebook_set_tab_label_text (GTK_NOTEBOOK (notebook),
+                                        code_widget_array [get_current_index ()]->vbox, file_name);
+        
+        gchar *uri = g_filename_to_uri (file_path, NULL, NULL);
+        if (!uri)
+        {
+            gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved but cannot get its URI");
+            gtk_widget_destroy (dialog);
+            return;
+        }
+
+        GtkRecentManager *recent_manager = gtk_recent_manager_get_default ();
+        if (!gtk_recent_manager_add_item (recent_manager, uri))
+            gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved but cannot add it to recent files");
+        g_free (file_path);
     }    
     gtk_widget_destroy (dialog);
 }
@@ -454,7 +530,7 @@ edit_select_block_activate (GtkWidget *widget)
     
     for (line = start_line; line >=0; line--)
     {
-        gchar *text = gtk_text_buffer_get_line_text (buffer, line);
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
         if (strrchr (text, ':'))
             /*Found the block's start*/
             break;
@@ -471,7 +547,7 @@ edit_select_block_activate (GtkWidget *widget)
     for (line = start_line; line < gtk_text_buffer_get_line_count (buffer);
         line ++)
     {
-        gchar *text = gtk_text_buffer_get_line_text (buffer, line);
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
         if (strrchr (text, ':'))
             /*Found the block's end*/
             break;
@@ -664,7 +740,7 @@ edit_matching_paranthesis_activate (GtkWidget *widget)
     gchar *line_text;
     gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
     pos = gtk_text_iter_get_offset (&iter);
-    line_text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter));    
+    line_text = gtk_text_buffer_get_line_text (buffer, gtk_text_iter_get_line (&iter), TRUE);    
     match_pos = gtk_text_buffer_get_matching_parethesis_pos (buffer, pos, line_text [pos]);
     if (match_pos == -1)
     {
@@ -730,8 +806,12 @@ format_dec_indent_activate (GtkWidget *widget)
     for (line = first_line; line <= last_line; line ++)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
+        if (get_indent_spaces_in_string (text) < indent_width)
+            continue;
+
         gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, indent_width);
-        gchar *text = gtk_text_buffer_get_text (buffer, &iter, &iter1, TRUE);
+        text = gtk_text_buffer_get_text (buffer, &iter, &iter1, TRUE);
         if (g_strcmp0 (text, indent_width_str) != 0)
              continue;
         gtk_text_buffer_delete (buffer, &iter, &iter1);
@@ -784,6 +864,10 @@ format_uncomment_out_activate (GtkWidget *widget)
     for (line = first_line; line <= last_line; line ++)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
+        gtk_text_buffer_get_line_end_iter (buffer, &iter1, line);
+        if (gtk_text_iter_get_line_offset (&iter1) < strlen (comment_out_str))
+             continue;
+
         gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, strlen (comment_out_str));
         gchar *text = gtk_text_buffer_get_text (buffer, &iter, &iter1, TRUE);
         if (g_strcmp0 (text, comment_out_str) != 0)
@@ -811,7 +895,7 @@ format_tabify_region_activate (GtkWidget *widget)
     int last_line = gtk_text_iter_get_line (&end_iter);
     for (line = first_line; line <= last_line; line ++)
     {
-        gchar* line_text = gtk_text_buffer_get_line_text (buffer, line);
+        gchar* line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
         int count_spaces = get_indent_spaces_in_string (line_text);
 
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
@@ -846,7 +930,7 @@ format_untabify_region_activate (GtkWidget *widget)
     for (line = first_line; line <= last_line; line ++)
     {
         int i, count_tabs = 0;
-        gchar* line_text = gtk_text_buffer_get_line_text (buffer, line);
+        gchar* line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
         
         for (i = 0; i< strlen (line_text); i++)
         {
@@ -1199,7 +1283,7 @@ navigate_go_to_block_start_activate  (GtkWidget *widget)
     
     for (line = start_line; line >=0; line--)
     {
-        gchar *text = gtk_text_buffer_get_line_text (buffer, line);
+        gchar *text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
         if (strrchr (text, ':'))
         {
             //Found the block now select the line
@@ -1255,6 +1339,7 @@ navigate_go_to_line_activate  (GtkWidget *widget)
 void
 project_new_activate (GtkWidget *widget)
 {
+    
 }
 
 void
