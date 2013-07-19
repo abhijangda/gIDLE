@@ -2,11 +2,20 @@
 #include "menus.h"
 #include "toolbar.h"
 #include "python_shell.h"
+#include "py_variable.h"
 
 static gboolean
 delete_event (GtkWidget *widget, GdkEvent *event);
 static void
 main_window_destroy (GtkWidget *widget);
+
+GRegex *regex_import_as, *regex_import;
+GRegex *regex_from_import, *regex_from_import_as;
+GRegex *regex_class, *regex_func;
+GRegex *regex_global_var, *regex_static_var;
+GRegex *regex_word;
+
+GAsyncQueue *async_queue;
 
 GtkBuilder *builder;
 extern gchar *search_text;
@@ -14,27 +23,37 @@ GtkWidget *status_bar;
 ChildProcessData *python_shell_data;
 gboolean bash_loaded;
 char *font_name;
+char *sys_path_string;
+char *python_sys_script_path = "./scripts/path.py";
 
 int
 main (int argc, char *argv [])
 {
+    /*Running Shell*/
     GError *error  = NULL;
-    
+
     python_shell_data = g_try_malloc (sizeof (ChildProcessData));
     python_shell_data->argv = NULL;
     python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
     python_shell_data->current_dir = NULL;
     
     bash_loaded = ptyFork (python_shell_data, &error);
-
-    GtkWidget *navigate_bookmarks;
-    
     gtk_init (&argc, &argv);
     
     python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
     g_io_add_watch (python_shell_data->channel, G_IO_IN,
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
+    
+    /**********/
+    
+    /*Get sys.path*/
+    char *sys_path_argv[] = {"python", "./scripts/path.py", NULL}; 
+    g_spawn_sync (NULL, sys_path_argv, NULL, G_SPAWN_SEARCH_PATH,
+                               NULL, NULL, &sys_path_string, NULL, NULL, NULL);
+    /***********/
 
+    /*Setting Main Window*/    
+    GtkWidget *navigate_bookmarks;
     builder = gtk_builder_new ();
     gtk_builder_add_from_file (builder, "./ui/main.ui", NULL);
 
@@ -332,8 +351,29 @@ main (int argc, char *argv [])
     is_code_folding = TRUE;
     show_line_numbers = TRUE;
     python_shell_path = "/usr/bin/python";
-    font_name = "Monospace";
+    font_name = "Liberation Mono";
     /*************/
+
+    /*Initialize Regular Expressions*/
+    regex_class = g_regex_new ("[ \\ \\t]*\\bclass\\b\\s*\\w+\\s*\\(*.*\\)*:", 0, 0, NULL);
+    regex_func = g_regex_new ("[ \\ \\t]*def\\s+[\\w\\d_]+\\s*\\(.+\\)\\:", 0, 0, NULL);
+    
+    /*Regex if you don't want to search imports with in indentation*/
+    regex_import = g_regex_new ("^import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
+    regex_import_as = g_regex_new ("^import\\s+[\\w\\d_\\.]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);
+    regex_from_import = g_regex_new ("^from\\s+[\\w\\d_\\.]+\\s+import\\s+[\\w\\d_]+", 0, 0, NULL);
+    regex_from_import_as = g_regex_new ("^from\\s+[\\w\\d_\\.]+\\s+import\\s+[\\w\\d_]+as\\s+[\\w\\d_]", 0, 0, NULL);
+    regex_global_var = g_regex_new ("^[\\w\\d_]+\\s*=\\s*[\\w\\d_]+\\s*\\(.+\\)", 0, 0, NULL);
+    regex_static_var = g_regex_new ("^\\s*[\\w\\d_]+\\s*=.+", 0, 0, NULL);
+    regex_word = g_regex_new ("[\\w\\d_]+$", 0, 0, NULL);
+
+    /*Regex if you want to search imports with in indentation*/
+    /*regex_import = g_regex_new ("^\\s*import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
+     *regex_import_as = g_regex_new ("^\\s*import\\s+[\\w\\d_]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);
+     */
+    /***********************/
+    
+    async_queue = g_async_queue_new ();
 
     //Creating code_widget_array
     code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
@@ -358,6 +398,7 @@ main (int argc, char *argv [])
     gtk_main ();
     return 0;
 }
+
 
 /* "delete-event" handler for
  * windowstatic gboolean can_read_to_text_view;
@@ -447,4 +488,5 @@ main_window_destroy (GtkWidget *widget)
     remove_all_code_widgets ();
     kill (python_shell_data->pid, SIGKILL);
     g_free (python_shell_data);
+    g_async_queue_unref (async_queue);
 }

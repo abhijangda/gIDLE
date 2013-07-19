@@ -233,22 +233,26 @@ code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
     GdkRectangle location;
     GtkTextIter rect_start_iter, rect_end_iter, current_iter;
     int i, first_line, last_line, last_line_pos, first_line_pos;
-    
+    float start_x = 1, end_x = gtk_widget_get_allocated_width (widget) - 2;
     cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
-    
+
     cairo_rectangle (cr, 0, 0, gtk_widget_get_allocated_width (widget),
                     gtk_widget_get_allocated_height (widget));
 
-    cairo_fill (cr); 
-    
-    cairo_set_line_width (cr, 0.5);
-    
+    cairo_fill (cr);
+    //cairo_set_line_width (cr, 1.0);
+    cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
+    cairo_move_to (cr, gtk_widget_get_allocated_width (widget), 0);
+    cairo_line_to (cr, gtk_widget_get_allocated_width (widget), gtk_widget_get_allocated_height (widget));
+    cairo_stroke (cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+
     gchar *line_str;
 
     gtk_text_buffer_get_iter_at_mark (buffer, &current_iter,
                                      gtk_text_buffer_get_insert (buffer));
 
-    cairo_set_source_rgb (cr, 0.3, 0.3, 0.3);
+    cairo_set_source_rgb (cr, 0, 0, 0);
 
     gtk_text_view_get_visible_rect (GTK_TEXT_VIEW (codewidget->sourceview),
                                    &location);
@@ -350,33 +354,47 @@ code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
                 break;
             }
         }
-        
+        /* The following lines till stars, displays GTK+ Creator 
+         * type Lines for Code Folding Widget. To display "+" instead
+         * Uncomment the commented lines and comment the uncommented
+         * lines, till stars 
+         */
+
         /*Drawing line at block start*/
         cairo_set_line_width (cr, 1);
-        cairo_rectangle (cr, 0, 
+        /*cairo_rectangle (cr, start_x,
                         window_y + code_folding_widget->block_info_array [i]->start_line_rect.height/4.0, 
-                        10, 
-                        code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
-        if (display_plus)
+                        end_x - start_x, 
+                        code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);*/
+        /*if (display_plus)
         {
-            cairo_move_to (cr, 5, 
+            cairo_move_to (cr, start_x + (end_x - start_x)/2, 
                           window_y + code_folding_widget->block_info_array [i]->start_line_rect.height/4.0);
-            cairo_line_to (cr, 5, 
+            cairo_line_to (cr, start_x + (end_x - start_x)/2, 
                           window_y +3 * code_folding_widget->block_info_array [i]->start_line_rect.height/4.0); 
-        }
-        
-        cairo_move_to (cr, 0, 
-                          window_y +code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
-        cairo_line_to (cr, 10,
-                          window_y +code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
-        
-        cairo_stroke (cr);
+        }*/
 
+       /* cairo_move_to (cr, start_x, 
+                          window_y +code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
+        cairo_line_to (cr, end_x - start_x,
+                          window_y +code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
+        
+        cairo_stroke (cr);*/
+        cairo_move_to (cr, start_x + (end_x - start_x)/2, 
+                          window_y + code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
+        cairo_line_to (cr, end_x,
+                          window_y + code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
+
+        cairo_stroke (cr);
+        
+        cairo_move_to (cr, start_x + (end_x - start_x)/2,
+                        window_y + code_folding_widget->block_info_array [i]->start_line_rect.height/2.0);
         /*Drawing line till block end*/
         /*Move to half of the width of drawing_area at the start of block*/
-        cairo_move_to (cr, 10/2,
-                      window_y + 3* code_folding_widget->block_info_array [i]->end_line_rect.height/4.0);
-
+        /*cairo_move_to (cr, start_x + (end_x - start_x)/2,
+                      window_y + 3* code_folding_widget->block_info_array [i]->end_line_rect.height/4.0);*/
+        
+        /********************************************************************/
         gtk_text_view_buffer_to_window_coords (GTK_TEXT_VIEW (codewidget->sourceview),
                                               GTK_TEXT_WINDOW_WIDGET,
                                               code_folding_widget->block_info_array [i]->end_line_rect.x,
@@ -384,10 +402,11 @@ code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
                                               &window_x, &window_y);
 
         /*Create horizontal line*/
-        cairo_line_to (cr, 10/2,
+        cairo_line_to (cr, start_x + (end_x - start_x)/2,
                       window_y + code_folding_widget->block_info_array [i]->end_line_rect.height/2.0);
-        cairo_line_to (cr, 10,
+        cairo_line_to (cr, end_x,
                       window_y + code_folding_widget->block_info_array [i]->end_line_rect.height/2.0);
         cairo_stroke (cr);
     }
+    //printf ("\n");
 }

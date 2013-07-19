@@ -3,6 +3,9 @@
 #ifndef CORE_FUNCS_H
 #define CORE_FUNCS_H
 
+gchar *
+g_file_input_stream_read_line (GFileInputStream *istream);
+
 int
 get_current_index ();
 
@@ -22,6 +25,9 @@ gboolean
 set_file_data (char *file_path, gchar *file_data, gsize length);
 
 int
+get_line_pos (GtkTextBuffer *buffer, int line);
+
+int
 get_indent_spaces_in_string (char *string);
 
 gchar *
@@ -38,6 +44,9 @@ is_file_modified ();
 
 int
 str_count_str (gchar *str1, gchar *str2);
+
+char *
+get_doc_string_between_lines (GtkTextBuffer *buffer, int start, int end);
 
 void
 gtk_text_buffer_append (GtkTextBuffer *buffer, gchar *text, int len);

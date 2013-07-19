@@ -1,12 +1,15 @@
 #include <glib.h>
 #include <glib/gprintf.h>
 
+#include "py_variable.h"
 #ifndef PY_FUNC_H
 #define PY_FUNC_H
 
+#define PY_FUNC(self) ((PyFunc *)self)
+
 struct _py_func
 {
-    gchar *name;
+    PyVariable py_var;
     gchar **argv; //NULL terminated array
     gdouble pos;
     int indentation;
@@ -18,16 +21,16 @@ PyFunc *
 py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation);
 
 void
-py_func_destroy (PyFunc *py_func);
+py_func_destroy (PyVariable *py_func);
 
 PyFunc *
 py_func_new_from_def (gchar *def_string, gdouble pos, int indentation);
 
 gchar *
-py_func_get_definition (PyFunc *py_func);
+py_func_get_definition (PyVariable *py_var);
 
-PyFunc *
-py_func_dup (PyFunc *py_func);
+PyVariable *
+py_func_dup (PyVariable *py_func);
 
 void
 py_funcv_append (PyFunc ***py_funcv, PyFunc *);

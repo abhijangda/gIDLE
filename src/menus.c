@@ -23,14 +23,14 @@ void
 file_new_activate (GtkWidget *widget)
 {
     int current_index = get_current_index ();
-    if (is_file_modified (current_index) && current_index != -1)
+    if (current_index != -1)
     {
         GtkWidget *dialog;
         dialog = gtk_message_dialog_new (GTK_WINDOW (window),
                                         GTK_DIALOG_DESTROY_WITH_PARENT, 
                                         GTK_MESSAGE_QUESTION,
                                         GTK_BUTTONS_YES_NO,
-                                        "Current file is modified, since last saved. Do you still want to create new file?");
+                                        "Do you want to create a new file?");
         if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_NO)
         {
             gtk_widget_destroy (dialog);
@@ -72,9 +72,11 @@ file_new_tab_activate (GtkWidget *widget)
 void
 file_open_activate (GtkWidget *widget)
 {
+    int index = get_current_index ();
+
     if (get_current_index () == -1)
         file_new_tab_activate (NULL);
-        
+
     /* Check if file has modified since last save */    
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File", GTK_WINDOW (window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -84,11 +86,33 @@ file_open_activate (GtkWidget *widget)
     init_file_filters ();
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), py_filter);
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), all_filter);
-    
+
+    if (code_widget_array [index]->file_path)
+        gtk_file_chooser_set_filename (GTK_FILE_CHOOSER (dialog),
+                                         code_widget_array [index]->file_path);
+
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
         char *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-        int index = get_current_index ();
+        index = get_current_index ();
+
+        /*If filename is already open then set filename's page as current page*/
+        for (index = 0; index < get_total_pages(); index++)
+        {
+            if (code_widget_array [index]->file_path && 
+                strcmp(filename, code_widget_array [index]->file_path) == 0)
+                 break;
+        }
+       
+        if (index != get_total_pages())
+        {
+            gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), index);
+            gtk_widget_destroy (dialog);
+            return;
+        }
+
+        index = get_current_index ();
+
         if (code_widget_array [index]->file_path != NULL ||
            strcmp (get_text_at_index (index), "") != 0 )
             file_new_tab_activate (NULL);
@@ -193,10 +217,9 @@ file_save_activate (GtkWidget *widget)
             show_error_message_dialog ("Cannot save file!");
             return;
         }
+        codewidget_update_class_funcs (code_widget_array[get_current_index ()]);
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");
     }
-
-    codewidget_update_class_funcs (code_widget_array[get_current_index ()]);
-    gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");
 }
 
 /* To save as
@@ -206,7 +229,8 @@ file_save_activate (GtkWidget *widget)
 void
 file_save_as_activate (GtkWidget *widget)
 {
-    if (get_current_index () == -1)
+    int index = get_current_index();
+    if (index == -1)
         return;
         
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Save File", GTK_WINDOW (window),
@@ -218,6 +242,10 @@ file_save_as_activate (GtkWidget *widget)
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), py_filter);
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), all_filter);
     
+    if (code_widget_array [index]->file_path)
+        gtk_file_chooser_set_filename (GTK_FILE_CHOOSER (dialog),
+                                         code_widget_array [index]->file_path);
+
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
         char *file_path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
@@ -254,6 +282,9 @@ file_save_as_activate (GtkWidget *widget)
         GtkRecentManager *recent_manager = gtk_recent_manager_get_default ();
         if (!gtk_recent_manager_add_item (recent_manager, uri))
             gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved but cannot add it to recent files");
+        
+        codewidget_update_class_funcs (code_widget_array[get_current_index ()]);
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");
         g_free (file_path);
     }    
     gtk_widget_destroy (dialog);
@@ -1312,7 +1343,7 @@ navigate_go_to_func_def_activate  (GtkWidget *widget)
 
         while (*p)
         {
-            if (g_strcmp0 (selected_text, (*p)->name) == 0)
+            if (g_strcmp0 (selected_text, ((PyVariable *)(*p))->name) == 0)
             {
                 GtkTextIter iter;
                 gtk_text_buffer_get_iter_at_offset (buffer, &iter, (*p)->pos);

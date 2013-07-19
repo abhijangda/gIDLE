@@ -5,6 +5,120 @@
 #include <string.h>
 #include <ctype.h>
 
+gchar *
+g_file_input_stream_read_line (GFileInputStream *istream)
+{
+    GString *line_str = g_string_new ("");
+    const gsize count = 100;
+    gchar buffer [count+1];
+    gssize readed = -1;
+
+    while ((readed = g_input_stream_read (G_INPUT_STREAM (istream), buffer, count, NULL, NULL)) == count)
+    {       
+        gchar *new_line_pos = NULL;
+        buffer [readed] = '\0';
+        //printf ("buffer%s\n", buffer);
+        if ((new_line_pos = strchr (buffer, '\n')))
+        {
+            goffset seek_pos = g_seekable_tell (G_SEEKABLE (istream));
+            g_seekable_seek (G_SEEKABLE (istream),
+                             seek_pos - strlen (new_line_pos) + 1, G_SEEK_SET,
+                             NULL, NULL);
+            buffer [new_line_pos - buffer] = '\0';
+            line_str = g_string_append (line_str, buffer);
+            gchar *line = line_str->str;
+            g_string_free (line_str, FALSE);
+            return line;
+        }
+        else
+            line_str = g_string_append (line_str, buffer);
+    }
+    if (readed == 0 || readed == -1)
+       return NULL;
+
+    buffer [readed] = '\0';
+    line_str = g_string_append (line_str, buffer);
+    gchar *line = line_str->str;
+    g_string_free (line_str, FALSE);
+    return line;
+}
+
+/* To get a newly allocated string containing doc string of 
+ * Python Functions, Classes or Modules between lines
+ * start and end
+ */
+char *
+get_doc_string_between_lines (GtkTextBuffer *buffer, int start, int end)
+{
+    GString *string = g_string_new ("");
+    GtkTextIter start_iter, end_iter;
+    gtk_text_buffer_get_iter_at_line (buffer, &start_iter, start);
+    gtk_text_buffer_get_line_end_iter (buffer, &end_iter, start);
+
+    gchar *first_line_str = gtk_text_buffer_get_text (buffer, &start_iter, 
+                                                      &end_iter, TRUE);
+    g_strstrip (first_line_str);
+
+    gchar *pos_triple_quotes = g_strstr_len (first_line_str, -1, "'''");
+    if (!pos_triple_quotes)
+        pos_triple_quotes = g_strstr_len (first_line_str, -1, "\"\"\"");
+    
+    if (!pos_triple_quotes)
+        return NULL;
+    
+    pos_triple_quotes += 3;
+
+    g_string_append (string, pos_triple_quotes);
+    
+    int line;
+    
+    for (line = start + 1; line <end; line++)
+    {
+        gtk_text_buffer_get_iter_at_line (buffer, &start_iter, line);
+        gtk_text_buffer_get_line_end_iter (buffer, &end_iter, line);
+    
+        gchar *line_str = gtk_text_buffer_get_text (buffer, &start_iter, 
+                                                    &end_iter, TRUE);
+        g_strstrip (line_str);
+        g_string_append_c (string, '\n');
+        g_string_append (string, line_str);
+    }
+    
+    gtk_text_buffer_get_iter_at_line (buffer, &start_iter, end);
+    gtk_text_buffer_get_line_end_iter (buffer, &end_iter, end);
+
+    gchar *end_line_str = gtk_text_buffer_get_text (buffer, &start_iter, 
+                                                      &end_iter, TRUE);
+    g_strstrip (end_line_str);
+
+    pos_triple_quotes = g_strstr_len (first_line_str, -1, "'''");
+    if (!pos_triple_quotes)
+        pos_triple_quotes = g_strstr_len (first_line_str, -1, "\"\"\"");
+    
+    if (!pos_triple_quotes)
+        return NULL;
+        
+    end_line_str [pos_triple_quotes - end_line_str] = '\0';
+
+    g_string_append (string, end_line_str);
+    
+    gchar *doc_string = string->str;
+    g_string_free (string, FALSE);
+    
+    return doc_string;
+}
+
+/* Get position of a line 
+ * in buffer
+ */
+int
+get_line_pos (GtkTextBuffer *buffer, int line)
+{
+    GtkTextIter iter;
+    gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
+    return gtk_text_iter_get_offset (&iter);
+}
+
 /* To get
  * current index
 */

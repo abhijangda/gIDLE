@@ -2,6 +2,8 @@
 #include "core_funcs.h"
 #include <string.h>
 
+extern PyVariable destroyed_variable;
+
 /* Create a new
  * PyFunc
  */
@@ -9,13 +11,17 @@ PyFunc *
 py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation)
 {
     PyFunc *py_func = g_try_malloc (sizeof (PyFunc));
+
     if (!py_func)
     {
         printf ("Cannot allocate new PyFunc in py_func_new\n");
         return NULL;
     }
 
-    py_func->name = g_strdup (name);
+    py_variable_init (PY_VARIABLE (py_func), name, FUNC);  
+    py_func->py_var.destroy = py_func_destroy;
+    py_func->py_var.get_definition = py_func_get_definition;
+    py_func->py_var.dup = py_func_dup;
     py_func->argv = g_strdupv (argv);
     py_func->pos = pos;
     py_func->indentation = indentation;
@@ -81,10 +87,11 @@ py_func_new_from_def (gchar *def_string, gdouble pos, int indentation)
  * returns a newly allocated string
  */
 gchar *
-py_func_get_definition (PyFunc *py_func)
+py_func_get_definition (PyVariable *py_var)
 {
-    gchar *argv_str = g_strjoinv (",", py_func->argv);
-    gchar *def = g_strjoin ("", "def", py_func->name, "(", argv_str, ")",
+    PyFunc *py_func = (PyFunc *)py_var;
+    gchar *argv_str = g_strjoinv (", ", py_func->argv);
+    gchar *def = g_strjoin ("", "def ", ((PyVariable *)py_func)->name, "(", argv_str, ")",
                            NULL);
     g_free (argv_str);
     return def;
@@ -93,14 +100,14 @@ py_func_get_definition (PyFunc *py_func)
 /*Duplicate PyFunc
  * returns a newly allocated copy
  */
-PyFunc *
-py_func_dup (PyFunc *__py_func)
+PyVariable *
+py_func_dup (PyVariable *__py_func)
 {
-    PyFunc *py_func = g_malloc (sizeof (PyFunc));
-    py_func->name = g_strdup (__py_func->name);
-    py_func->argv = g_strdupv (__py_func->argv);
-    py_func->pos = __py_func->pos;
-    return py_func;
+    PyFunc *func = py_func_new (__py_func->name, PY_FUNC (__py_func)->argv,
+                                  PY_FUNC (__py_func)->pos, 
+                                  PY_FUNC (__py_func)->indentation);
+    py_variable_set_doc_string (PY_VARIABLE (func), __py_func->doc_string);
+    return PY_VARIABLE (func);
 }
 
 /*Duplicate PyFunc array
@@ -117,7 +124,7 @@ py_func_dupv (PyFunc **__py_funcv)
     int size  = 1;
     while (*p != NULL)
     {
-        py_funcv [size-1] = *p;
+        py_funcv [size-1] = PY_FUNC (py_func_dup (PY_VARIABLE (*p)));
         size++;
         py_funcv = g_realloc (py_funcv, (size)*sizeof (PyFunc *));
         p++;
@@ -153,11 +160,15 @@ py_funcv_append (PyFunc ***py_funcv, PyFunc *py_func)
  * PyFunc
  */
 void
-py_func_destroy (PyFunc *py_func)
+py_func_destroy (PyVariable *py_func)
 {
-    g_free (py_func->name);
-    g_strfreev (py_func->argv);
-    g_free (py_func);
+    if (!py_func)
+        return;
+
+    PyFunc *_func = PY_FUNC (py_func);
+    py_variable_destroy (&(_func->py_var));
+    g_strfreev (_func->argv);
+    g_free (_func);
 }
 
 /*Destroy
@@ -173,7 +184,8 @@ py_funcv_destroy (PyFunc **py_funcv)
     int size  = 1;
     while (*p != NULL)
     {
-        g_free (*p);
+        PyVariable *py_var  = PY_VARIABLE (*p);
+        py_func_destroy (py_var);
         p++;
     }
     g_free (py_funcv);
