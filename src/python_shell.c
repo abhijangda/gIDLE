@@ -69,16 +69,16 @@ run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv[], gchar 
     /* Run all the commands in one go using "&&" */
     /*Setting Kivy environment variable
      * remove it and move it to options */
-     GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
-
-   /* Setting curr_dir */
+    GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo/kivy && ");
+ 
+    /* Setting curr_dir */
     if (curr_dir)
     {
         gstr_argv = g_string_append (gstr_argv, "cd ");
         gstr_argv = g_string_append (gstr_argv, curr_dir);
         gstr_argv = g_string_append (gstr_argv, " && ");
     }
-   
+
     gstr_argv = g_string_append (gstr_argv, "python ");
     gstr_argv = g_string_append (gstr_argv, filename);
     

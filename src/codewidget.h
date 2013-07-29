@@ -45,6 +45,8 @@ struct _codewidget
     int py_variable_array_size;
     void *data; /*To be used internally by functions to pass data*/
     gboolean thread_ended;
+    PyStaticVar **curr_func_static_var_array;
+    int curr_func_static_var_array_size;
 };
 
 typedef struct _codewidget CodeWidget;

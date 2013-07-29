@@ -2,6 +2,8 @@
 #include "menus.h"
 #include "main.h"
 
+extern int mode;
+
 void
 toolbar_new_clicked (GtkWidget *widget)
 {

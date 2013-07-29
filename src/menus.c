@@ -7,6 +7,8 @@
 #include "main.h"
 #include "python_shell.h"
 #include "run_script_dialog.h"
+#include "class_browser.h"
+#include "new_proj_dlg.h"
 
 #include <string.h>
 
@@ -38,9 +40,16 @@ file_new_activate (GtkWidget *widget)
         }
         gtk_widget_destroy (dialog);
     }
-    
+
     if (current_index == -1)
         file_new_tab_activate (widget);
+
+    current_index = get_current_index ();
+
+    while (gtk_events_pending ())
+        gtk_main_iteration_do (FALSE);
+    
+    set_mode (GIDLE_MODE_FILE);
 
     gtk_text_buffer_set_text (gtk_text_view_get_buffer (
                                                  GTK_TEXT_VIEW (code_widget_array [current_index]->sourceview)),
@@ -74,9 +83,10 @@ file_open_activate (GtkWidget *widget)
 {
     int index = get_current_index ();
 
-    if (get_current_index () == -1)
+    if (index == -1)
         file_new_tab_activate (NULL);
-
+    
+    index = get_current_index ();
     /* Check if file has modified since last save */    
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File", GTK_WINDOW (window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -147,6 +157,7 @@ file_open_activate (GtkWidget *widget)
                                 "File Loaded but cannot add it to recent files");
         
         g_free (uri);
+        set_mode (GIDLE_MODE_FILE);
     }
     gtk_widget_destroy (dialog);
 }
@@ -1370,12 +1381,36 @@ navigate_go_to_line_activate  (GtkWidget *widget)
 void
 project_new_activate (GtkWidget *widget)
 {
+    Project *proj = create_new_project (GTK_WINDOW (window));
+    if (!proj)
+        return;
     
+    if (!project_create_files_and_dirs (proj, NULL))
+    {
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot create project");
+        return;
+    }
+
+    gchar *proj_file = g_strdup (proj->file_name);
+    open_project_from_file (proj_file);
+    g_free (proj_file);
 }
 
 void
 project_open_activate (GtkWidget *widget)
 {
+    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open Project", GTK_WINDOW (window),
+                                                     GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                     GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                                     GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
+                                                     NULL);
+
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        char *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+        open_project_from_file (filename);
+    }
+   gtk_widget_destroy (dialog);
 }
 
 void
@@ -1479,4 +1514,5 @@ tools_auto_indent_activate (GtkWidget *widget)
 void
 tools_class_browser_activate (GtkWidget *widget)
 {
+    load_class_browser_dialog ();
 }

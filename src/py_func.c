@@ -22,7 +22,30 @@ py_func_new (gchar *name, gchar **argv, gdouble pos, int indentation)
     py_func->py_var.destroy = py_func_destroy;
     py_func->py_var.get_definition = py_func_get_definition;
     py_func->py_var.dup = py_func_dup;
-    py_func->argv = g_strdupv (argv);
+    py_func->arg_array = NULL;
+    py_func->arg_array_size = 0;
+    if (argv)
+    {
+        gchar **arg = argv;
+        while (*arg)
+        {
+            if (!g_strcmp0 (*arg, ""))
+            {
+                arg++;
+                continue;
+            }
+            PyStaticVar *var = NULL;
+            if (strrchr (*arg, '='))
+                var = py_static_var_new_from_def (*arg);
+
+            else
+                var = py_static_var_new (*arg, "", NULL);
+
+            py_static_varv_add_py_static_var (&(py_func->arg_array), 
+                                               &(py_func->arg_array_size), var);
+            arg++;
+        }
+    }
     py_func->pos = pos;
     py_func->indentation = indentation;
     return py_func;
@@ -90,10 +113,20 @@ gchar *
 py_func_get_definition (PyVariable *py_var)
 {
     PyFunc *py_func = (PyFunc *)py_var;
-    gchar *argv_str = g_strjoinv (", ", py_func->argv);
-    gchar *def = g_strjoin ("", "def ", ((PyVariable *)py_func)->name, "(", argv_str, ")",
+    int i;
+    GString *argv_str = g_string_new("");
+    
+    for (i = 0; i < py_func->arg_array_size; i++)
+    {
+        argv_str = g_string_append (argv_str,
+                                    py_static_var_get_definition (
+                                        PY_VARIABLE (py_func->arg_array [i])));
+        if (i >= 1)
+            argv_str = g_string_append_c (argv_str, ',');
+    }
+    gchar *def = g_strjoin ("", "def ", ((PyVariable *)py_func)->name, "(", argv_str->str, ")",
                            NULL);
-    g_free (argv_str);
+    g_string_free (argv_str, TRUE);
     return def;
 }
 
@@ -103,9 +136,11 @@ py_func_get_definition (PyVariable *py_var)
 PyVariable *
 py_func_dup (PyVariable *__py_func)
 {
-    PyFunc *func = py_func_new (__py_func->name, PY_FUNC (__py_func)->argv,
+    PyFunc *func = py_func_new (__py_func->name, NULL,
                                   PY_FUNC (__py_func)->pos, 
                                   PY_FUNC (__py_func)->indentation);
+    func->arg_array = PY_FUNC (__py_func)->arg_array;
+    func->arg_array_size = PY_FUNC (__py_func)->arg_array_size;
     py_variable_set_doc_string (PY_VARIABLE (func), __py_func->doc_string);
     return PY_VARIABLE (func);
 }
@@ -166,8 +201,11 @@ py_func_destroy (PyVariable *py_func)
         return;
 
     PyFunc *_func = PY_FUNC (py_func);
+    int i;
+    for (i = 0; i < _func->arg_array_size; i++)
+         py_static_var_destroy (PY_VARIABLE (_func->arg_array [i]));
+
     py_variable_destroy (&(_func->py_var));
-    g_strfreev (_func->argv);
     g_free (_func);
 }
 
@@ -188,5 +226,6 @@ py_funcv_destroy (PyFunc **py_funcv)
         py_func_destroy (py_var);
         p++;
     }
+
     g_free (py_funcv);
 }

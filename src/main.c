@@ -4,6 +4,8 @@
 #include "python_shell.h"
 #include "py_variable.h"
 
+int mode = -1;
+
 static gboolean
 delete_event (GtkWidget *widget, GdkEvent *event);
 static void
@@ -13,6 +15,7 @@ GRegex *regex_import_as, *regex_import;
 GRegex *regex_from_import, *regex_from_import_as;
 GRegex *regex_class, *regex_func;
 GRegex *regex_global_var, *regex_static_var;
+GRegex *regex_local_var, *regex_self_var;
 GRegex *regex_word;
 
 GAsyncQueue *async_queue;
@@ -20,11 +23,16 @@ GAsyncQueue *async_queue;
 GtkBuilder *builder;
 extern gchar *search_text;
 GtkWidget *status_bar;
+GtkWidget *proj_tree_view_scrollwin;
+
 ChildProcessData *python_shell_data;
 gboolean bash_loaded;
 char *font_name;
 char *sys_path_string;
 char *python_sys_script_path = "./scripts/path.py";
+
+static gboolean
+proj_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *event, gpointer data);
 
 int
 main (int argc, char *argv [])
@@ -36,16 +44,16 @@ main (int argc, char *argv [])
     python_shell_data->argv = NULL;
     python_shell_data->slave_termios = g_try_malloc (sizeof (struct termios));
     python_shell_data->current_dir = NULL;
-    
+
     bash_loaded = ptyFork (python_shell_data, &error);
     gtk_init (&argc, &argv);
-    
+
     python_shell_data->channel = g_io_channel_unix_new (python_shell_data->master_fd);
     g_io_add_watch (python_shell_data->channel, G_IO_IN,
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
-    
+
     /**********/
-    
+
     /*Get sys.path*/
     char *sys_path_argv[] = {"python", "./scripts/path.py", NULL}; 
     g_spawn_sync (NULL, sys_path_argv, NULL, G_SPAWN_SEARCH_PATH,
@@ -57,21 +65,53 @@ main (int argc, char *argv [])
     builder = gtk_builder_new ();
     gtk_builder_add_from_file (builder, "./ui/main.ui", NULL);
 
+    content_box = GTK_WIDGET (gtk_builder_get_object (builder, "content_box"));
+
     window = gtk_builder_get_object (builder, "main_window");
     g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
+
+    proj_tree_view_scrollwin = gtk_scrolled_window_new (NULL, NULL);
+
+    gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (proj_tree_view_scrollwin),
+                                          GTK_SHADOW_IN);
+
+    proj_tree_view = gtk_tree_view_new ();
+    gtk_container_add (GTK_CONTAINER (proj_tree_view_scrollwin), proj_tree_view);
+
+    g_object_ref (proj_tree_view_scrollwin);
+
+    current_project = NULL;
+
+    proj_tree_store = gtk_tree_store_new (1, G_TYPE_STRING);
+
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
+    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes ("Project",
+                                                                           renderer, "text", 0, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (proj_tree_view), column);
+    gtk_tree_view_set_model (GTK_TREE_VIEW (proj_tree_view),
+                              GTK_TREE_MODEL (proj_tree_store));
+    gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (proj_tree_view),
+                                        TRUE);
     
-    status_bar = GTK_WIDGET (gtk_builder_get_object (builder, "status_bar"));
-    
+    //GtkTreeSelection *proj_tree_selection =  gtk_tree_view_get_selection (GTK_TREE_VIEW (proj_tree_selection));
+    g_signal_connect (G_OBJECT (proj_tree_view), "button-press-event", 
+                        G_CALLBACK (proj_tree_view_dbl_clicked), NULL);
+
+    content_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
+    g_object_ref (content_paned);
+
+    status_bar = gtk_statusbar_new ();
+
     navigate_bookmarks = GTK_WIDGET (gtk_builder_get_object (builder,
                                     "navigate_bookmarks"));
     bookmarks_menu = gtk_menu_new ();
 
     gtk_menu_item_set_submenu (GTK_MENU_ITEM (navigate_bookmarks),
                               bookmarks_menu);
-    
+
     GtkAccelGroup *accelgroup = GTK_ACCEL_GROUP (gtk_builder_get_object (builder,
                                                                        "accelgroup"));
-    
+
     /*Connecting menu item's signals*/ 
     //For File Menu
     g_signal_connect (gtk_builder_get_object (builder, "file_new"), "activate",
@@ -346,7 +386,6 @@ main (int argc, char *argv [])
     bookmark_array= NULL;
     bookmark_array_size = 0;
     current_bookmark_index = -1;
-    mode = GIDLE_MODE_FILE;
     is_code_completion = TRUE;
     is_code_folding = TRUE;
     show_line_numbers = TRUE;
@@ -365,7 +404,9 @@ main (int argc, char *argv [])
     regex_from_import_as = g_regex_new ("^from\\s+[\\w\\d_\\.]+\\s+import\\s+[\\w\\d_]+as\\s+[\\w\\d_]", 0, 0, NULL);
     regex_global_var = g_regex_new ("^[\\w\\d_]+\\s*=\\s*[\\w\\d_]+\\s*\\(.+\\)", 0, 0, NULL);
     regex_static_var = g_regex_new ("^\\s*[\\w\\d_]+\\s*=.+", 0, 0, NULL);
-    regex_word = g_regex_new ("[\\w\\d_]+$", 0, 0, NULL);
+    regex_word = g_regex_new ("[self]*[\\w\\d_\\.]+$", 0, 0, NULL);
+    regex_local_var = g_regex_new ("^\\s*[\\w\\d_\\.]+\\s*=.+", 0, 0, NULL);
+    regex_self_var = g_regex_new ("^\\s+self\\.[\\w\\d_]+\\s*=.+", 0, 0, NULL);
 
     /*Regex if you want to search imports with in indentation*/
     /*regex_import = g_regex_new ("^\\s*import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
@@ -376,13 +417,14 @@ main (int argc, char *argv [])
     async_queue = g_async_queue_new ();
 
     //Creating code_widget_array
-    code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
-    code_widget_array [0] = codewidget_new ();
-    code_widget_array_size = 1;
+    //code_widget_array = g_malloc0 (1*sizeof (CodeWidget *));
+    //code_widget_array [0] = codewidget_new ();
+    code_widget_array_size = 0;
     
-    notebook = gtk_builder_get_object (builder, "notebook");
-    gtk_notebook_append_page (GTK_NOTEBOOK (notebook), code_widget_array [0]->vbox,
-                                                     gtk_label_new ("New File"));
+    notebook = gtk_notebook_new ();
+    g_object_ref (notebook);
+    //gtk_notebook_append_page (GTK_NOTEBOOK (notebook), code_widget_array [0]->vbox,
+    //                                                 gtk_label_new ("New File"));
     /*If bash is not loaded*/
     if (!bash_loaded)
     {
@@ -457,7 +499,7 @@ delete_event (GtkWidget *widget, GdkEvent *event)
         gtk_widget_destroy (dialog);
         return TRUE;
     }
-    
+
     if (run == 1)
     {
         /* If "Save" was clicked */
@@ -482,9 +524,71 @@ delete_event (GtkWidget *widget, GdkEvent *event)
     }
 }
 
+void
+set_mode (int _mode)
+{
+    if (_mode == mode)
+        return;
+
+    gtk_widget_unparent (status_bar);
+    mode = _mode;
+    if (gtk_widget_get_parent (notebook))
+        gtk_widget_unparent (notebook);
+    
+    if (gtk_widget_get_parent (content_paned))
+        gtk_widget_unparent (content_paned);
+   
+    if (gtk_widget_get_parent (proj_tree_view_scrollwin))
+        gtk_widget_unparent (proj_tree_view_scrollwin);
+
+    if (_mode == GIDLE_MODE_FILE)
+    {
+        gtk_box_pack_start (GTK_BOX (content_box), notebook, TRUE, TRUE, 0);
+    }
+    else
+    {
+        gtk_box_pack_start (GTK_BOX (content_box), content_paned, TRUE, TRUE, 0);
+        gtk_paned_pack1 (GTK_PANED (content_paned), proj_tree_view_scrollwin, TRUE, TRUE);
+        gtk_paned_pack2 (GTK_PANED (content_paned), notebook, TRUE, TRUE);
+    }
+
+    gtk_widget_set_size_request (notebook, 600, 100);
+    gtk_box_pack_start (GTK_BOX (content_box), status_bar, FALSE, FALSE, 0);
+    gtk_widget_show_all (content_box);
+}
+
+static gboolean
+proj_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *_event, gpointer data)
+{
+    GdkEventButton *event = (GdkEventButton *)_event;
+    if (event->type != GDK_2BUTTON_PRESS || 
+         event->window != gtk_tree_view_get_bin_window (GTK_TREE_VIEW (widget)))
+        return FALSE;
+    
+    int tx, ty;
+    GtkTreePath *path;
+    GtkTreeViewColumn *column;
+    //gtk_tree_view_convert_bin_window_to_tree_coords (GTK_TREE_VIEW (widget), _event->x, _event->y, &tx, &ty);
+    if (!gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (widget), event->x, event->y, &path, &column, NULL, NULL))
+        printf ("sdfsdfdsfsf\n");
+    
+    return FALSE;
+}
+
 static void
 main_window_destroy (GtkWidget *widget)
 {
+    g_regex_unref (regex_class);     
+    g_regex_unref (regex_func);
+    g_regex_unref (regex_import);
+    g_regex_unref (regex_import_as);
+    g_regex_unref (regex_from_import);
+    g_regex_unref (regex_from_import_as);
+    g_regex_unref (regex_global_var);
+    g_regex_unref (regex_static_var);
+    g_regex_unref (regex_local_var);
+    g_regex_unref (regex_self_var);
+
     remove_all_code_widgets ();
     kill (python_shell_data->pid, SIGKILL);
     g_free (python_shell_data);

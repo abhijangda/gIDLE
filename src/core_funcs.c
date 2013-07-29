@@ -1,9 +1,138 @@
 #include "core_funcs.h"
 #include "menus.h"
+#include "main.h"
 
 #include <gtk/gtk.h>
 #include <string.h>
 #include <ctype.h>
+
+extern GtkWidget *status_bar;
+
+static void
+_recursively_insert_into_proj_tree_view (GFile *dir, GtkTreeIter *parent)
+{
+    GFileEnumerator *enumerator;
+    enumerator = g_file_enumerate_children (dir,
+                                            G_FILE_ATTRIBUTE_STANDARD_NAME
+                                            "," 
+                                            G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                            G_FILE_QUERY_INFO_NONE,
+                                            NULL, NULL);
+    if (!enumerator)
+        return;
+
+    GFileInfo *fileinfo;
+
+    while ((fileinfo = g_file_enumerator_next_file (enumerator, NULL, NULL)) != NULL)
+    {
+        GtkTreeIter dir_iter;
+        const gchar *file_name = g_file_info_get_name (fileinfo);
+        
+        gtk_tree_store_append (proj_tree_store, &dir_iter, parent);
+        gtk_tree_store_set (proj_tree_store, &dir_iter,
+                             0, file_name, -1);
+
+     if (g_file_info_get_file_type (fileinfo) == G_FILE_TYPE_DIRECTORY)
+        {
+            GFile *child_dir = g_file_get_child (dir, file_name);
+            _recursively_insert_into_proj_tree_view (child_dir, &dir_iter);
+
+            g_object_unref (child_dir);
+        }
+        g_object_unref (fileinfo);
+    }
+    g_object_unref (enumerator);
+}
+
+gboolean
+open_project_from_file (gchar *proj_file)
+{
+    if (current_project)
+    {
+        GtkWidget *dialog;
+        dialog = gtk_message_dialog_new (GTK_WINDOW (window),
+                                        GTK_DIALOG_DESTROY_WITH_PARENT, 
+                                        GTK_MESSAGE_QUESTION,
+                                        GTK_BUTTONS_YES_NO,
+                                        "Do you want to open a new project?");
+        if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_NO)
+        {
+            gtk_widget_destroy (dialog);
+            return;
+        }
+        gtk_widget_destroy (dialog);
+        project_destroy (current_project);
+        current_project = NULL;
+
+        gtk_tree_store_clear (proj_tree_store);
+    }
+
+    gchar *file_data = get_file_data (proj_file);
+    if (!file_data)
+    {
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot Open Project.");
+        return;
+    }
+    
+    current_project = project_new_from_string (file_data, proj_file);
+
+    if (!current_project)
+    {
+        g_free (file_data);
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot Open Project.");
+        return;
+    }
+
+    g_free (file_data);
+
+    GtkTreeIter iter;
+    gtk_tree_store_append (proj_tree_store, &iter, NULL);
+    gtk_tree_store_set (proj_tree_store, &iter,
+                                  0, current_project->name, -1);
+
+    GFile *proj_dir = g_file_new_for_path (current_project->proj_dir);
+    GFileEnumerator *enumerator;
+    enumerator = g_file_enumerate_children (proj_dir,
+                                            G_FILE_ATTRIBUTE_STANDARD_NAME
+                                            "," 
+                                            G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                            G_FILE_QUERY_INFO_NONE,
+                                            NULL, NULL);
+    if (!enumerator)
+    {
+        project_destroy (current_project);
+        current_project = NULL;
+        gtk_statusbar_push (GTK_STATUSBAR (status_bar),
+                             0, "Cannot Open Project.");
+        return;
+    }
+
+    GFileInfo *fileinfo;
+
+    while ((fileinfo = g_file_enumerator_next_file (enumerator, NULL, NULL)) != NULL)
+    {
+        GtkTreeIter dir_iter;
+        const gchar *file_name = g_file_info_get_name (fileinfo);
+
+        gtk_tree_store_append (proj_tree_store, &dir_iter, &iter);
+        gtk_tree_store_set (proj_tree_store, &dir_iter,
+                             0, file_name, -1);
+
+     if (g_file_info_get_file_type (fileinfo) == G_FILE_TYPE_DIRECTORY)
+        {
+            GFile *file = g_file_get_child (proj_dir, file_name);
+            _recursively_insert_into_proj_tree_view (file, &dir_iter);
+
+            g_object_unref (file);
+        }
+        g_object_unref (fileinfo);
+    }
+    
+    g_object_unref (proj_dir);
+    g_object_unref (enumerator);
+
+    set_mode (GIDLE_MODE_PROJECT);   
+}
 
 gchar *
 g_file_input_stream_read_line (GFileInputStream *istream)
@@ -13,22 +142,38 @@ g_file_input_stream_read_line (GFileInputStream *istream)
     gchar buffer [count+1];
     gssize readed = -1;
 
-    while ((readed = g_input_stream_read (G_INPUT_STREAM (istream), buffer, count, NULL, NULL)) == count)
-    {       
+    while ((readed = g_input_stream_read (G_INPUT_STREAM (istream), buffer,
+                                                count, NULL, NULL)) == count)
+    {
         gchar *new_line_pos = NULL;
+        gchar *line_cont_pos = NULL;
+
         buffer [readed] = '\0';
-        //printf ("buffer%s\n", buffer);
+
         if ((new_line_pos = strchr (buffer, '\n')))
         {
-            goffset seek_pos = g_seekable_tell (G_SEEKABLE (istream));
-            g_seekable_seek (G_SEEKABLE (istream),
-                             seek_pos - strlen (new_line_pos) + 1, G_SEEK_SET,
-                             NULL, NULL);
-            buffer [new_line_pos - buffer] = '\0';
-            line_str = g_string_append (line_str, buffer);
-            gchar *line = line_str->str;
-            g_string_free (line_str, FALSE);
-            return line;
+            if ((line_cont_pos = strchr (buffer, '\\')) && new_line_pos - line_cont_pos > 0)
+            {
+                goffset seek_pos = g_seekable_tell (G_SEEKABLE (istream));
+                g_seekable_seek (G_SEEKABLE (istream),
+                                 seek_pos - strlen (new_line_pos) + 1, G_SEEK_SET,
+                                 NULL, NULL);
+                buffer [new_line_pos - buffer] = '\0';
+                line_str = g_string_append (line_str, buffer);
+            }
+            else
+            {
+                goffset seek_pos = g_seekable_tell (G_SEEKABLE (istream));
+                g_seekable_seek (G_SEEKABLE (istream),
+                                 seek_pos - strlen (new_line_pos) + 1, G_SEEK_SET,
+                                 NULL, NULL);
+
+                buffer [new_line_pos - buffer] = '\0';
+                line_str = g_string_append (line_str, buffer);
+                gchar *line = line_str->str;
+                g_string_free (line_str, FALSE);
+                return line;
+            }
         }
         else
             line_str = g_string_append (line_str, buffer);
@@ -76,7 +221,7 @@ get_doc_string_between_lines (GtkTextBuffer *buffer, int start, int end)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &start_iter, line);
         gtk_text_buffer_get_line_end_iter (buffer, &end_iter, line);
-    
+
         gchar *line_str = gtk_text_buffer_get_text (buffer, &start_iter, 
                                                     &end_iter, TRUE);
         g_strstrip (line_str);
@@ -97,11 +242,11 @@ get_doc_string_between_lines (GtkTextBuffer *buffer, int start, int end)
     
     if (!pos_triple_quotes)
         return NULL;
-        
+
     end_line_str [pos_triple_quotes - end_line_str] = '\0';
 
     g_string_append (string, end_line_str);
-    
+
     gchar *doc_string = string->str;
     g_string_free (string, FALSE);
     
@@ -694,6 +839,27 @@ gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index, gboolean s
     }
 
     return text;
+}
+
+/*To return string between
+ *start and end, including start
+ *and including end 
+ */
+gchar *
+get_text_between_strings (gchar *text, gchar *start, gchar *end)
+{
+    gchar *new_str = g_malloc ((end - start+2)*sizeof (gchar));
+    gchar *p = start;
+    gchar *q = new_str;
+
+    while (p != end + 1)
+    {
+        *q = *p;
+        p++;
+        q++;
+    }
+    new_str [end - start + 1] = '\0';
+    return new_str;
 }
 
 /* To remove text between

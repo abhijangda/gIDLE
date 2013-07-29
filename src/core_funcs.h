@@ -3,6 +3,9 @@
 #ifndef CORE_FUNCS_H
 #define CORE_FUNCS_H
 
+gboolean
+open_project_from_file (gchar *proj_file);
+
 gchar *
 g_file_input_stream_read_line (GFileInputStream *istream);
 
@@ -14,6 +17,9 @@ get_total_pages ();
 
 gchar *
 remove_text_between_strings (gchar *text, gchar *start, gchar *end);
+
+gchar *
+get_text_between_strings (gchar *text, gchar *start, gchar *end);
 
 gchar *
 get_file_data (char *file_path);

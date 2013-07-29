@@ -78,7 +78,8 @@ am_gIDLE_OBJECTS = src/main.$(OBJEXT) src/codewidget.$(OBJEXT) \
 	src/run_script_dialog.$(OBJEXT) src/py_variable.$(OBJEXT) \
 	src/code_assists.$(OBJEXT) src/py_module.$(OBJEXT) \
 	src/codewidget_parser.$(OBJEXT) src/line_iterator.$(OBJEXT) \
-	src/py_static_var.$(OBJEXT)
+	src/py_static_var.$(OBJEXT) src/class_browser.$(OBJEXT) \
+	src/project_class.$(OBJEXT) src/new_proj_dlg.$(OBJEXT)
 gIDLE_OBJECTS = $(am_gIDLE_OBJECTS)
 am__DEPENDENCIES_1 =
 gIDLE_DEPENDENCIES = $(am__DEPENDENCIES_1)
@@ -219,7 +220,7 @@ top_srcdir = .
 AUTOMAKE_OPTIONS = subdir-objects
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 AM_CPPFLAGS = $(DEPS_CFLAGS)
-gIDLE_SOURCES = src/main.c src/main.h src/codewidget.c src/codewidget.h src/menus.c src/menus.h src/core_funcs.h src/core_funcs.c src/find_dialog.h src/find_dialog.c src/find_replace_dialog.c src/find_replace_dialog.h src/reg_exp_dialog.c src/reg_exp_dialog.h src/bookmark.h src/bookmark.c src/go_to_line_dialog.h src/go_to_line_dialog.c src/toolbar.h src/toolbar.c src/line_history_item.h src/line_history_item.c src/py_class.c src/py_func.c src/py_class.h src/py_func.h src/code_folding_widget.h src/code_folding_widget.c src/pty_fork.c src/pty_fork.h src/python_shell.c src/python_shell.h src/run_script_dialog.h src/run_script_dialog.c src/py_variable.c src/py_variable.h src/code_assists.h src/code_assists.c src/py_module.h src/py_module.c src/codewidget_parser.c src/line_iterator.h src/line_iterator.c src/py_static_var.c src/py_static_var.h
+gIDLE_SOURCES = src/main.c src/main.h src/codewidget.c src/codewidget.h src/menus.c src/menus.h src/core_funcs.h src/core_funcs.c src/find_dialog.h src/find_dialog.c src/find_replace_dialog.c src/find_replace_dialog.h src/reg_exp_dialog.c src/reg_exp_dialog.h src/bookmark.h src/bookmark.c src/go_to_line_dialog.h src/go_to_line_dialog.c src/toolbar.h src/toolbar.c src/line_history_item.h src/line_history_item.c src/py_class.c src/py_func.c src/py_class.h src/py_func.h src/code_folding_widget.h src/code_folding_widget.c src/pty_fork.c src/pty_fork.h src/python_shell.c src/python_shell.h src/run_script_dialog.h src/run_script_dialog.c src/py_variable.c src/py_variable.h src/code_assists.h src/code_assists.c src/py_module.h src/py_module.c src/codewidget_parser.c src/line_iterator.h src/line_iterator.c src/py_static_var.c src/py_static_var.h src/class_browser.c src/class_browser.h src/project_class.c src/project_class.h src/new_proj_dlg.h src/new_proj_dlg.c
 gIDLE_LDADD = $(DEPS_LIBS) -lpthread
 dist_noinst_SCRIPTS = autogen.sh
 all: all-am
@@ -350,6 +351,12 @@ src/line_iterator.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/py_static_var.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/class_browser.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/project_class.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/new_proj_dlg.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 gIDLE$(EXEEXT): $(gIDLE_OBJECTS) $(gIDLE_DEPENDENCIES) $(EXTRA_gIDLE_DEPENDENCIES) 
 	@rm -f gIDLE$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(gIDLE_OBJECTS) $(gIDLE_LDADD) $(LIBS)
@@ -357,6 +364,7 @@ gIDLE$(EXEEXT): $(gIDLE_OBJECTS) $(gIDLE_DEPENDENCIES) $(EXTRA_gIDLE_DEPENDENCIE
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f src/bookmark.$(OBJEXT)
+	-rm -f src/class_browser.$(OBJEXT)
 	-rm -f src/code_assists.$(OBJEXT)
 	-rm -f src/code_folding_widget.$(OBJEXT)
 	-rm -f src/codewidget.$(OBJEXT)
@@ -369,6 +377,8 @@ mostlyclean-compile:
 	-rm -f src/line_iterator.$(OBJEXT)
 	-rm -f src/main.$(OBJEXT)
 	-rm -f src/menus.$(OBJEXT)
+	-rm -f src/new_proj_dlg.$(OBJEXT)
+	-rm -f src/project_class.$(OBJEXT)
 	-rm -f src/pty_fork.$(OBJEXT)
 	-rm -f src/py_class.$(OBJEXT)
 	-rm -f src/py_func.$(OBJEXT)
@@ -384,6 +394,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 include src/$(DEPDIR)/bookmark.Po
+include src/$(DEPDIR)/class_browser.Po
 include src/$(DEPDIR)/code_assists.Po
 include src/$(DEPDIR)/code_folding_widget.Po
 include src/$(DEPDIR)/codewidget.Po
@@ -396,6 +407,8 @@ include src/$(DEPDIR)/line_history_item.Po
 include src/$(DEPDIR)/line_iterator.Po
 include src/$(DEPDIR)/main.Po
 include src/$(DEPDIR)/menus.Po
+include src/$(DEPDIR)/new_proj_dlg.Po
+include src/$(DEPDIR)/project_class.Po
 include src/$(DEPDIR)/pty_fork.Po
 include src/$(DEPDIR)/py_class.Po
 include src/$(DEPDIR)/py_func.Po

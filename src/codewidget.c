@@ -8,6 +8,9 @@
 extern GtkWidget *status_bar;
 extern char *font_name;
 
+static void
+_codewidget_parse_function (CodeWidget *codewidget, PyClass *klass, PyFunc *func, int curr_line);
+
 static gboolean
 display_status_bar_message (gpointer data);
 
@@ -84,7 +87,8 @@ static gboolean can_combo_class_activate = TRUE;
 
 extern GRegex *regex_class, *regex_func, *regex_static_var;
 static GRegex  *regex_comments, *regex_str, *regex_mutlistr, *regex_line;
-extern GRegex *regex_word;
+extern GRegex *regex_word, *regex_local_var;
+extern GRegex *regex_self_var;
 
 extern GAsyncQueue *async_queue;
 static gboolean display_status_bar_message_return_false;
@@ -266,6 +270,9 @@ codewidget_new ()
     codewidget->py_variable_array = NULL;
     codewidget->py_variable_array_size = 0;
     
+    codewidget->curr_func_static_var_array = NULL;
+    codewidget->curr_func_static_var_array_size = 0;
+
     codewidget->thread_ended = TRUE;
 
     regex_comments = g_regex_new ("#.+", 0, 0, NULL);
@@ -497,13 +504,18 @@ codewidget_mark_set (GtkTextBuffer *buffer, GtkTextIter *iter, GtkTextMark *mark
                                                  func);
                 }
                 else
+                {
+                    func = -1;
                     gtk_combo_box_set_active (GTK_COMBO_BOX (codewidget->func_combobox), -1);
+                }
 
             }
 
             can_combo_func_activate = TRUE;
             can_combo_class_activate = TRUE;
         }
+         if (class != -1 && func != -1 && codewidget->py_class_array [class]->py_func_array)
+             _codewidget_parse_function (codewidget, codewidget->py_class_array [class], codewidget->py_class_array [class]->py_func_array [func], line);
     }
     
     codewidget->prev_line = line;
@@ -574,6 +586,27 @@ codewidget_delete_range (GtkTextBuffer *buffer, GtkTextIter *start,
     if (class == -1)
         return;
 
+    if (gtk_widget_get_parent (codewidget->code_assist_widget->parent) != NULL)
+    {
+        if (gtk_text_iter_get_offset (start) + len < code_list_show_pos)
+            _codewidget_hide_code_list_and_grab_source_view (codewidget);
+
+        else
+        {
+            GtkTextIter code_list_show_iter;
+            gtk_text_buffer_get_iter_at_offset (buffer, &code_list_show_iter, 
+                                                code_list_show_pos);
+
+            gchar *sel_text = gtk_text_buffer_get_text (buffer,
+                                                        &code_list_show_iter,
+                                                        start, FALSE);
+            g_strstrip (sel_text);
+            printf ("sel_text %s\n", sel_text);
+            /* If there is nothing to be filled in code_list_view, remove it*/
+            if (!code_assist_show_matches (codewidget->code_assist_widget, sel_text))
+                _codewidget_hide_code_list_and_grab_source_view (codewidget);
+        }
+    }
     /*Updating Functions position when text is deleted*/
     do
     {
@@ -621,49 +654,11 @@ codewidget_insert_text (GtkTextBuffer *buffer, GtkTextIter *location,
                                                         location, FALSE);
             g_strstrip (sel_text);
 
-            if (strcmp (sel_text, "") != 0)
+            if (g_strcmp0 (sel_text, "") != 0)
             {
-                GtkTreeIter tree_iter;
-                if (!gtk_tree_model_get_iter_first (
-                    GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                    &tree_iter))
-                    goto update;
-
                 gchar *full_text = g_strconcat (sel_text, text, NULL);
-
-                do
-                {
-                    gpointer value;
-                    gtk_tree_model_get (
-                        GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                        &tree_iter, 1, &value, -1);
-
-                    PyVariable *py_var = (PyVariable *) value;
-                    if (!g_strstr_len (py_var->name, -1, full_text))
-                    {
-                        GtkTreeIter _tree_iter = tree_iter;
-                        gtk_tree_model_iter_next (
-                            GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                            &_tree_iter);
-
-                        gtk_list_store_remove (
-                            codewidget->code_assist_widget->list_store,
-                            &tree_iter);
-
-                        tree_iter = _tree_iter;                    
-                    }
-                    else
-                        gtk_tree_model_iter_next (
-                            GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                            &tree_iter);
-                }
-                while (gtk_list_store_iter_is_valid (
-                    codewidget->code_assist_widget->list_store, &tree_iter));
-                
                 /* If there is nothing to be filled in code_list_view, remove it*/
-                if (!gtk_tree_model_iter_n_children (
-                    GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                    NULL))
+                if (!code_assist_show_matches (codewidget->code_assist_widget, full_text))
                     _codewidget_hide_code_list_and_grab_source_view (codewidget);
             }
         }
@@ -1211,6 +1206,69 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
                 g_free (doc_string);
             }
             line = _line;
+
+            if (klass && py_func && !g_strcmp0 (PY_VARIABLE (py_func)->name, "__init__"))
+            {
+                /*Detect __init__ and parse it. As __init__ function is always
+                 *executed when object is created, so all instance variable 
+                 *declared in __init__ will be added
+                 */
+
+                line += 1;
+                while (line < gtk_text_buffer_get_line_count (buffer))
+                {
+                    line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
+                    int indentation2 = get_indent_spaces_in_string (line_text) / indent_width;
+                    if (indentation2 == indentation)
+                    {
+                        line--;
+                        break;
+                    }
+
+                    if (g_regex_match (regex_self_var, line_text ,0, &match_info_class))
+                    {
+                        gchar *self_dot_pos = strchr (line_text, '.');
+                        self_dot_pos++;
+                        PyStaticVar *static_var = py_static_var_new_from_def (self_dot_pos);
+                        if (static_var)
+                        {
+                            int i;
+                            for (i = 0; i < klass->py_static_var_array_size; i++)
+                            {
+                                if (!g_strcmp0 (PY_VARIABLE (static_var)->name, 
+                                                 PY_VARIABLE (klass->py_static_var_array[i])->name))
+                                    break;
+                            }
+                            
+                            if (i == klass->py_static_var_array_size)
+                            {
+                                py_static_varv_add_py_static_var (&(klass->py_static_var_array),
+                                                                &(klass->py_static_var_array_size), static_var);
+                                /*Detecting for static_var's doc string. All though Python
+                                  *doesn't support it but static variables has their doc string
+                                  *set by user
+                                  */
+                               
+                                line += 1;
+                                _line = _codewidget_get_line_at_multiline_comment_end (buffer, line);
+                                if (_line != line)
+                                {
+                                    gchar *doc_string = get_doc_string_between_lines (buffer, line, _line);
+                                    py_variable_set_doc_string (PY_VARIABLE (static_var), doc_string);
+                                    g_free (doc_string);
+                                }
+                                line = _line;
+                           }
+                            else
+                            {
+                                py_static_var_destroy (PY_VARIABLE (static_var));
+                                line += 1;
+                            }
+                        }
+                        g_match_info_free (match_info_class);
+                    }
+                }                
+            }
         }
         else if (can_find_static && g_regex_match (regex_static_var, line_text ,0, &match_info_class))
         {
@@ -1315,7 +1373,8 @@ _codewidget_hide_code_list_and_grab_source_view (CodeWidget *codewidget)
     if (gtk_widget_get_parent (codewidget->code_assist_widget->parent) != NULL)
              gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (codewidget->code_assist_widget->parent)),
                                      codewidget->code_assist_widget->parent);
-        //gtk_widget_grab_focus (codewidget->sourceview);
+    code_assist_clear (codewidget->code_assist_widget);
+    //gtk_widget_grab_focus (codewidget->sourceview);
 }
 
 /* To show code_list_view at desired position
@@ -1398,17 +1457,13 @@ end:
 }
 
 void
-_codewidget_add_class_funcs_to_code_assist (GtkListStore **list_store, PyClass *class)
+_codewidget_add_class_funcs_to_code_assist (CodeWidget *codewidget, PyClass *class)
 {
     int i;
     for (i = 0; i < class->py_static_var_array_size; i++)
     {
         PyStaticVar *var = class->py_static_var_array [i];
-        GtkTreeIter iter;
-        gtk_list_store_append (*list_store, &iter);
-        gtk_list_store_set (*list_store, &iter, 0,
-                                  (PY_VARIABLE (var))->get_definition (PY_VARIABLE (var)),
-                                  1, var, -1);
+        code_assist_add_py_var (codewidget->code_assist_widget, PY_VARIABLE (var));
     }
 
     PyFunc **py_func = class->py_func_array;
@@ -1416,17 +1471,13 @@ _codewidget_add_class_funcs_to_code_assist (GtkListStore **list_store, PyClass *
     {
         while (*py_func)
         {
-            GtkTreeIter iter;
-            gtk_list_store_append (*list_store, &iter);
-            gtk_list_store_set (*list_store, &iter, 0,
-                                      (PY_VARIABLE (*py_func))->get_definition (PY_VARIABLE (*py_func)),
-                                      1, *py_func, -1);
-             py_func++;
+            code_assist_add_py_var (codewidget->code_assist_widget, PY_VARIABLE (*py_func));
+            py_func++;
          }
     }
 
     for (i = 0; i < class->base_classes_size; i++)
-        _codewidget_add_class_funcs_to_code_assist (list_store, class->base_classes[i]);
+        _codewidget_add_class_funcs_to_code_assist (codewidget, class->base_classes[i]);
 }
 
 /* This function will show the code_assist on the basis of matches
@@ -1457,73 +1508,102 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
         /*Populate list store*/
 
         int curr_class_index = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->class_combobox));
-        gtk_list_store_clear (codewidget->code_assist_widget->list_store);
-        _codewidget_add_class_funcs_to_code_assist (&(codewidget->code_assist_widget->list_store),
+        code_assist_clear (codewidget->code_assist_widget);
+        _codewidget_add_class_funcs_to_code_assist (codewidget,
                                                 codewidget->py_class_array [curr_class_index]);
         _codewidget_show_code_list_view (codewidget);
     }
     else if (dot_entered)
     {
-        /*Split text on the basis of "." and navigate through variable array
-         *to find which module it is 
+        /*If dot is entered then there can be two cases, may be module name is 
+         *<module>.<module/class/function> or it may be just <module> which
+         *contains other children.
          */
-
-        gchar **text_split = g_strsplit (text, ".", 0);
-        gchar **_split = text_split;
-
         int i;
+        PyVariable *parent_py_var = NULL;
         for (i = 0; i < codewidget->py_variable_array_size; i++)
         {
             gchar *name = codewidget->py_variable_array [i]->name;
-            if (g_strstr_len (name, -1, _split [0]) == name)
+            if (!g_strcmp0 (name, text))
+            {
+                /*If name is like <module>.<module/class/function>*/
+                parent_py_var = codewidget->py_variable_array [i];
                 break;
+            }
         }
 
-        _split++;
-        if (i < codewidget->py_variable_array_size)
-        {
-            PyVariable *parent_py_var = codewidget->py_variable_array [i];
-            gtk_list_store_clear (codewidget->code_assist_widget->list_store);
-            while (*_split)
+        if (i == codewidget->py_variable_array_size)
+        {          
+            /*It may be just <module> which
+             *contains other children.
+             */
+            /*Split text on the basis of "." and navigate through variable array
+             *to find which module it is 
+             */
+    
+            gchar **text_split = g_strsplit (text, ".", 0);
+            gchar **_split = text_split;
+            gboolean found_module = FALSE;
+    
+            for (i = 0; i < codewidget->py_variable_array_size; i++)
             {
-                if (parent_py_var->type != MODULE)
+                gchar *name = codewidget->py_variable_array [i]->name;
+                if (!g_strcmp0 (name, _split [0]))
                     break;
-
-                for (i = 0; i < PY_MODULE (parent_py_var)->py_variable_array_size; i++)
-                {
-                    if (!g_strcmp0 (PY_MODULE (parent_py_var)->py_variable_array [i]->name, _split [0]))
-                        break;
-                }
-                if (i == PY_MODULE (parent_py_var)->py_variable_array_size)
-                    break;
-
-                parent_py_var = PY_MODULE (parent_py_var)->py_variable_array [i];
-                _split++;
             }
-
+    
+            _split++;
+            if (i < codewidget->py_variable_array_size)
+            {
+                parent_py_var = codewidget->py_variable_array [i];
+                code_assist_clear (codewidget->code_assist_widget);
+                while (*_split)
+                {
+                    if (parent_py_var->type != MODULE)
+                        break;
+    
+                    for (i = 0; i < PY_MODULE (parent_py_var)->py_variable_array_size; i++)
+                    {
+                        if (!g_strcmp0 (PY_MODULE (parent_py_var)->py_variable_array [i]->name, _split [0]))
+                            break;
+                    }
+                    if (i == PY_MODULE (parent_py_var)->py_variable_array_size)
+                        break;
+    
+                    parent_py_var = PY_MODULE (parent_py_var)->py_variable_array [i];
+                    _split++;
+                }
+                g_strfreev (text_split);
+            }
+        }
+        
+        if (parent_py_var)
+        {
             for (i = 0; i < PY_MODULE (parent_py_var)->py_variable_array_size; i++)
             {
                 PyVariable *py_var = PY_MODULE (parent_py_var)->py_variable_array [i];
-                GtkTreeIter iter;
-                gtk_list_store_append (codewidget->code_assist_widget->list_store, &iter);
-                gtk_list_store_set (codewidget->code_assist_widget->list_store, &iter,
-                                          0, py_var->get_definition (py_var),
-                                          1, py_var, -1);
+                code_assist_add_py_var (codewidget->code_assist_widget, py_var);
             }
             _codewidget_show_code_list_view (codewidget);
         }
-        g_strfreev (text_split);
     }
     else if (g_regex_match (regex_word, line_text, 0, &match_info))
     {
-        gtk_list_store_clear (codewidget->code_assist_widget->list_store);
         gchar *word = g_match_info_fetch (match_info, 0);
+        if (g_strstr_len (word, -1, "self.") == word)
+        {
+            gchar *after_self = word + 5; /*strlen ("self.") is 5*/
+            if (code_assist_show_matches (codewidget->code_assist_widget,
+                                           after_self))
+                 goto end;
+        }
+
         if (strlen (word) < 4)
         {
             _codewidget_hide_code_list_and_grab_source_view (codewidget);
             goto end;
         }
-
+        code_assist_clear (codewidget->code_assist_widget);
         int i;
         /*Add all PyVariables*/
         for (i = 0; i <codewidget->py_variable_array_size; i++)
@@ -1531,11 +1611,7 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
             PyVariable *py_var = codewidget->py_variable_array [i];
             if (g_strstr_len (py_var->name, -1, word))
             {
-                GtkTreeIter iter;
-                gtk_list_store_append (codewidget->code_assist_widget->list_store, &iter);
-                gtk_list_store_set (codewidget->code_assist_widget->list_store, &iter,
-                                          0, py_var->get_definition (py_var),
-                                          1, py_var, -1);
+                 code_assist_add_py_var (codewidget->code_assist_widget, py_var);
             }
         }
         
@@ -1545,11 +1621,7 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
             PyVariable *py_var = PY_VARIABLE (codewidget->py_class_array [0]->py_static_var_array[i]);
             if (g_strstr_len (py_var->name, -1, word))
             {
-                GtkTreeIter iter;
-                gtk_list_store_append (codewidget->code_assist_widget->list_store, &iter);
-                gtk_list_store_set (codewidget->code_assist_widget->list_store, &iter,
-                                          0, py_var->get_definition (py_var),
-                                          1, py_var, -1);
+                 code_assist_add_py_var (codewidget->code_assist_widget, py_var);
             }
         }
 
@@ -1561,18 +1633,43 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
             {
                 if (g_strstr_len (PY_VARIABLE (py_func)->name, -1, word))
                 {
-                    GtkTreeIter iter;
-                    gtk_list_store_append (codewidget->code_assist_widget->list_store, &iter);
-                    gtk_list_store_set (codewidget->code_assist_widget->list_store, &iter, 0,
-                                              (PY_VARIABLE (*py_func))->get_definition (PY_VARIABLE (*py_func)),
-                                              1, *py_func, -1);
-                     py_func++;
+                    code_assist_add_py_var (codewidget->code_assist_widget, PY_VARIABLE (*py_func));
+                    py_func++;
+                }
+            }
+        }
+
+        /*Add all variables defined in function*/
+        for (i = 0; i < codewidget->curr_func_static_var_array_size; i++)
+        {
+            PyVariable *py_var = PY_VARIABLE (codewidget->curr_func_static_var_array [i]);
+            if (g_strstr_len (py_var->name, -1, word))
+            {
+                 code_assist_add_py_var (codewidget->code_assist_widget, py_var);
+            }
+        }
+        
+        /*Add arguments of current function*/
+        int class = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->class_combobox));
+        int func = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->func_combobox));
+        
+        if (class != -1 && func != -1)
+        {
+            PyStaticVar **varv = codewidget->py_class_array [class]->py_func_array [func]->arg_array;
+            int varc = codewidget->py_class_array [class]->py_func_array [func]->arg_array_size;
+    
+            for (i = 0; i < varc; i++)
+            {
+                PyVariable *py_var = PY_VARIABLE (varv [i]);
+                if (g_strstr_len (py_var->name, -1, word))
+                {
+                     code_assist_add_py_var (codewidget->code_assist_widget, py_var);
                 }
             }
         }
 
         if (_codewidget_show_code_list_view (codewidget))
-            code_list_show_pos = pos - strlen (word);
+            code_list_show_pos = pos - strlen (word) - 1;
 end:
         g_free (word);
         g_match_info_free (match_info);
@@ -1605,7 +1702,6 @@ codewidget_key_release (GtkWidget *widget, GdkEvent *event, gpointer data)
     else if (event->key.keyval != GDK_KEY_Down &&
               event->key.keyval != GDK_KEY_Left &&
               event->key.keyval != GDK_KEY_Return &&
-              event->key.keyval != GDK_KEY_BackSpace &&
               event->key.keyval != GDK_KEY_Home &&
               event->key.keyval != GDK_KEY_Up &&
               event->key.keyval != GDK_KEY_Escape &&
@@ -1617,8 +1713,62 @@ codewidget_key_release (GtkWidget *widget, GdkEvent *event, gpointer data)
     return FALSE;
 }
 
+/*This function will parse the lines of 
+ *function of this class.
+ */
+static void
+_codewidget_parse_function (CodeWidget *codewidget, PyClass *klass, PyFunc *func, int curr_line)
+{
+    GtkTextIter iter, new_iter;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (codewidget->sourceview));
+    gtk_text_buffer_get_iter_at_offset (buffer, &iter, func->pos);
+    int line = gtk_text_iter_get_line (&iter);
+    char *line_text;
+
+    int i;
+    for (i = 0; i < codewidget->curr_func_static_var_array_size; i++)
+        py_static_var_destroy (PY_VARIABLE (codewidget->curr_func_static_var_array [i]));
+    
+    g_free (codewidget->curr_func_static_var_array);
+
+    codewidget->curr_func_static_var_array = NULL;
+    codewidget->curr_func_static_var_array_size = 0;
+
+    GMatchInfo *match_info;
+
+    while (line <= curr_line)
+    {
+        line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
+        if (g_regex_match (regex_local_var, line_text, 0, &match_info))
+        {
+            PyStaticVar *static_var = py_static_var_new_from_def (line_text);
+            if (static_var)
+            {
+                int i;
+                for (i = 0; i < codewidget->curr_func_static_var_array_size; i++)
+                {
+                    if (!g_strcmp0 (PY_VARIABLE (static_var)->name, 
+                                     PY_VARIABLE (codewidget->curr_func_static_var_array[i])->name))
+                        break;
+                }
+                
+                if (i == codewidget->curr_func_static_var_array_size)
+                {
+                    py_static_varv_add_py_static_var (&(codewidget->curr_func_static_var_array),
+                                                    &(codewidget->curr_func_static_var_array_size), static_var);
+                }
+                else
+                     py_static_var_destroy (PY_VARIABLE (static_var));
+            }
+        }
+
+        line ++;
+    }
+    g_match_info_free (match_info);
+}
+
 /*Event Handler for
- * "key-press-event"
+ *"key-press-event"
  */
 static gboolean
 codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
@@ -1658,7 +1808,7 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
                 gtk_text_buffer_insert (buffer, &iter, "\n", 1);
                 for (i = 1; i <= indentation; i++)
                     gtk_text_buffer_insert (buffer, &iter, " ", 1);
-    
+
                 return TRUE;
             }
         

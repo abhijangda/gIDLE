@@ -15,6 +15,7 @@ extern GRegex *regex_import_as, *regex_import;
 extern GRegex *regex_from_import, *regex_from_import_as;
 extern GRegex *regex_class, *regex_func;
 extern GRegex *regex_global_var, *regex_static_var;
+extern GRegex *regex_self_var;
 
 extern char *sys_path_string;
 
@@ -834,7 +835,6 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
                                             &(module->py_variable_array_size), PY_VARIABLE (py_func));
 
             /*************************/
-
             g_free (func_def_string);
             g_match_info_free (match_info_func);
 
@@ -844,6 +844,62 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
             {
                 py_variable_set_doc_string (PY_VARIABLE (py_func), doc_str);
                 g_free (doc_str);
+            }
+            
+            if (klass && py_func && !g_strcmp0 (PY_VARIABLE (py_func)->name, "__init__"))
+            {
+                /*Detect __init__ and parse it. As __init__ function is always
+                 *executed when object is created, so all instance variable 
+                 *declared in __init__ will be added
+                 */
+                while ((line = g_file_input_stream_read_line (*distream)))
+                {
+                    int indentation2 = get_indent_spaces_in_string (line) / indent_width;
+                    if (indentation2 == indentation)
+                    {
+                        g_seekable_seek (G_SEEKABLE (*distream),
+                             g_seekable_tell (G_SEEKABLE (*distream)) - strlen (line) + 1, G_SEEK_SET,
+                             NULL, NULL);
+                        break;
+                    }
+
+                    if (g_regex_match (regex_self_var, line ,0, &match_info_class))
+                    {
+                        gchar *self_dot_pos = strchr (line, '.');
+                        self_dot_pos++;
+                        PyStaticVar *static_var = py_static_var_new_from_def (self_dot_pos);
+                        if (static_var)
+                        {
+                            /*Detecting for static_var's doc string. All though Python
+                              *doesn't support it but static variables has their doc string
+                              *set by user
+                              */
+                            int i;
+                            for (i = 0; i < (*klass)->py_static_var_array_size; i++)
+                            {
+                                if (!g_strcmp0 (PY_VARIABLE (static_var)->name, PY_VARIABLE ((*klass)->py_static_var_array[i])->name))
+                                    break;
+                            }
+                            
+                            if (i == (*klass)->py_static_var_array_size)
+                            {
+                                py_static_varv_add_py_static_var (&((*klass)->py_static_var_array),
+                                                            &((*klass)->py_static_var_array_size), static_var);
+                                gchar *doc_str = _py_module_get_doc_string_for_py_var (distream);
+                                if (doc_str)
+                                {
+                                    py_variable_set_doc_string (PY_VARIABLE (static_var), doc_str);
+                                    g_free (doc_str);
+                                }
+                            }
+                            else
+                                py_static_var_destroy (PY_VARIABLE (static_var));
+                        }
+                        g_match_info_free (match_info_class);
+                    }
+                g_free (line);
+                line = NULL;
+                }                
             }
         }
         else if (klass && can_find_static && 

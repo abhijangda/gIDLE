@@ -66,7 +66,58 @@ code_assist_widget_new()
 
     g_object_ref (_code_assist->parent);
     
+    _code_assist->py_var_array_size = 0;
+    _code_assist->py_var_array = NULL;
     return _code_assist;
+}
+
+void
+code_assist_add_py_var (CodeAssistWidget *code_assist, PyVariable *py_var)
+{
+    GtkTreeIter iter;
+    gtk_list_store_append (code_assist->list_store, &iter);
+    gtk_list_store_set (code_assist->list_store, &iter,
+                              0, py_var->get_definition (py_var),
+                              1, py_var, -1);
+
+    py_variablev_add_variable (&(code_assist->py_var_array), 
+                                &(code_assist->py_var_array_size), py_var);
+}
+
+gboolean
+code_assist_show_matches (CodeAssistWidget *code_assist, gchar *string)
+{
+    GtkTreeIter tree_iter;
+
+    gtk_list_store_clear (code_assist->list_store);
+    
+    gboolean found = FALSE;
+    int i;
+    for (i = 0; i < code_assist->py_var_array_size; i++)
+    {
+        if (g_strstr_len (code_assist->py_var_array [i]->name, -1, string))
+        {
+            GtkTreeIter iter;
+            gtk_list_store_append (code_assist->list_store, &iter);
+            gtk_list_store_set (code_assist->list_store, &iter,
+                                      0, code_assist->py_var_array [i]->get_definition (code_assist->py_var_array [i]),
+                                      1, code_assist->py_var_array [i], -1);
+            found = TRUE;
+        }
+    }
+    if (!found)
+        return FALSE;
+    
+    return TRUE;
+}
+
+void
+code_assist_clear (CodeAssistWidget *code_assist)
+{
+    gtk_list_store_clear (code_assist->list_store);
+    g_free (code_assist->py_var_array);
+    code_assist->py_var_array_size = 0;
+    code_assist->py_var_array = NULL;
 }
 
 static void
@@ -111,5 +162,7 @@ code_assist_destroy (CodeAssistWidget *code_assist)
     gtk_widget_destroy (code_assist->list_view);
     gtk_widget_destroy (code_assist->scroll_win);
     gtk_widget_destroy (code_assist->parent);
+    g_free (code_assist->py_var_array);
+    code_assist->py_var_array  = NULL;
     g_free (code_assist);
 }

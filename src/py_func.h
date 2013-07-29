@@ -2,6 +2,8 @@
 #include <glib/gprintf.h>
 
 #include "py_variable.h"
+#include "py_static_var.h"
+
 #ifndef PY_FUNC_H
 #define PY_FUNC_H
 
@@ -10,9 +12,10 @@
 struct _py_func
 {
     PyVariable py_var;
-    gchar **argv; //NULL terminated array
     gdouble pos;
     int indentation;
+    PyStaticVar **arg_array;
+    int arg_array_size;
 };
 
 typedef struct _py_func PyFunc;
