@@ -79,7 +79,9 @@ am_gIDLE_OBJECTS = src/main.$(OBJEXT) src/codewidget.$(OBJEXT) \
 	src/code_assists.$(OBJEXT) src/py_module.$(OBJEXT) \
 	src/codewidget_parser.$(OBJEXT) src/line_iterator.$(OBJEXT) \
 	src/py_static_var.$(OBJEXT) src/class_browser.$(OBJEXT) \
-	src/project_class.$(OBJEXT) src/new_proj_dlg.$(OBJEXT)
+	src/project_class.$(OBJEXT) src/new_proj_dlg.$(OBJEXT) \
+	src/symbols_view.$(OBJEXT) src/proj_notebook.$(OBJEXT) \
+	src/proj_pref_dialog.$(OBJEXT) src/options_dialog.$(OBJEXT)
 gIDLE_OBJECTS = $(am_gIDLE_OBJECTS)
 am__DEPENDENCIES_1 =
 gIDLE_DEPENDENCIES = $(am__DEPENDENCIES_1)
@@ -220,7 +222,27 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 AM_CPPFLAGS = $(DEPS_CFLAGS)
-gIDLE_SOURCES = src/main.c src/main.h src/codewidget.c src/codewidget.h src/menus.c src/menus.h src/core_funcs.h src/core_funcs.c src/find_dialog.h src/find_dialog.c src/find_replace_dialog.c src/find_replace_dialog.h src/reg_exp_dialog.c src/reg_exp_dialog.h src/bookmark.h src/bookmark.c src/go_to_line_dialog.h src/go_to_line_dialog.c src/toolbar.h src/toolbar.c src/line_history_item.h src/line_history_item.c src/py_class.c src/py_func.c src/py_class.h src/py_func.h src/code_folding_widget.h src/code_folding_widget.c src/pty_fork.c src/pty_fork.h src/python_shell.c src/python_shell.h src/run_script_dialog.h src/run_script_dialog.c src/py_variable.c src/py_variable.h src/code_assists.h src/code_assists.c src/py_module.h src/py_module.c src/codewidget_parser.c src/line_iterator.h src/line_iterator.c src/py_static_var.c src/py_static_var.h src/class_browser.c src/class_browser.h src/project_class.c src/project_class.h src/new_proj_dlg.h src/new_proj_dlg.c
+gIDLE_SOURCES = src/main.c src/main.h src/codewidget.c \
+	src/codewidget.h src/menus.c src/menus.h src/core_funcs.h \
+	src/core_funcs.c src/find_dialog.h src/find_dialog.c \
+	src/find_replace_dialog.c src/find_replace_dialog.h \
+	src/reg_exp_dialog.c src/reg_exp_dialog.h src/bookmark.h \
+	src/bookmark.c src/go_to_line_dialog.h src/go_to_line_dialog.c \
+	src/toolbar.h src/toolbar.c src/line_history_item.h \
+	src/line_history_item.c src/py_class.c src/py_func.c \
+	src/py_class.h src/py_func.h src/code_folding_widget.h \
+	src/code_folding_widget.c src/pty_fork.c src/pty_fork.h \
+	src/python_shell.c src/python_shell.h src/run_script_dialog.h \
+	src/run_script_dialog.c src/py_variable.c src/py_variable.h \
+	src/code_assists.h src/code_assists.c src/py_module.h \
+	src/py_module.c src/codewidget_parser.c src/line_iterator.h \
+	src/line_iterator.c src/py_static_var.c src/py_static_var.h \
+	src/class_browser.c src/class_browser.h src/project_class.c \
+	src/project_class.h src/new_proj_dlg.h src/new_proj_dlg.c \
+	src/symbols_view.c src/symbols_view.h src/proj_notebook.c \
+	src/proj_notebook.h src/proj_pref_dialog.h \
+	src/proj_pref_dialog.c src/options_dialog.c \
+	src/options_dialog.h
 gIDLE_LDADD = $(DEPS_LIBS) -lpthread
 dist_noinst_SCRIPTS = autogen.sh
 all: all-am
@@ -357,6 +379,14 @@ src/project_class.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/new_proj_dlg.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/symbols_view.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/proj_notebook.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/proj_pref_dialog.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/options_dialog.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 gIDLE$(EXEEXT): $(gIDLE_OBJECTS) $(gIDLE_DEPENDENCIES) $(EXTRA_gIDLE_DEPENDENCIES) 
 	@rm -f gIDLE$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(gIDLE_OBJECTS) $(gIDLE_LDADD) $(LIBS)
@@ -378,6 +408,9 @@ mostlyclean-compile:
 	-rm -f src/main.$(OBJEXT)
 	-rm -f src/menus.$(OBJEXT)
 	-rm -f src/new_proj_dlg.$(OBJEXT)
+	-rm -f src/options_dialog.$(OBJEXT)
+	-rm -f src/proj_notebook.$(OBJEXT)
+	-rm -f src/proj_pref_dialog.$(OBJEXT)
 	-rm -f src/project_class.$(OBJEXT)
 	-rm -f src/pty_fork.$(OBJEXT)
 	-rm -f src/py_class.$(OBJEXT)
@@ -388,6 +421,7 @@ mostlyclean-compile:
 	-rm -f src/python_shell.$(OBJEXT)
 	-rm -f src/reg_exp_dialog.$(OBJEXT)
 	-rm -f src/run_script_dialog.$(OBJEXT)
+	-rm -f src/symbols_view.$(OBJEXT)
 	-rm -f src/toolbar.$(OBJEXT)
 
 distclean-compile:
@@ -408,6 +442,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/menus.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/new_proj_dlg.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/options_dialog.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/proj_notebook.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/proj_pref_dialog.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/project_class.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/pty_fork.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/py_class.Po@am__quote@
@@ -418,6 +455,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/python_shell.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/reg_exp_dialog.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/run_script_dialog.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/symbols_view.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/toolbar.Po@am__quote@
 
 .c.o:

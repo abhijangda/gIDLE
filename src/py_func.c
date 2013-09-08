@@ -120,8 +120,8 @@ py_func_get_definition (PyVariable *py_var)
     {
         argv_str = g_string_append (argv_str,
                                     py_static_var_get_definition (
-                                        PY_VARIABLE (py_func->arg_array [i])));
-        if (i >= 1)
+                                    PY_VARIABLE (py_func->arg_array [i])));
+        if (i != py_func->arg_array_size - 1)
             argv_str = g_string_append_c (argv_str, ',');
     }
     gchar *def = g_strjoin ("", "def ", ((PyVariable *)py_func)->name, "(", argv_str->str, ")",

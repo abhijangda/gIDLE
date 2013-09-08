@@ -1,25 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <!-- interface-requires gtk+ 3.0 -->
-  <object class="GtkRadioButton" id="radiobutton5">
-    <property name="label" translatable="yes">radiobutton</property>
-    <property name="visible">True</property>
-    <property name="can_focus">True</property>
-    <property name="receives_default">False</property>
-    <property name="xalign">0</property>
-    <property name="active">True</property>
-    <property name="draw_indicator">True</property>
+  <object class="GtkAdjustment" id="adjustment1">
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
   </object>
-  <object class="GtkRadioButton" id="radiobutton6">
-    <property name="label" translatable="yes">radiobutton</property>
-    <property name="visible">True</property>
-    <property name="can_focus">True</property>
-    <property name="receives_default">False</property>
-    <property name="xalign">0</property>
-    <property name="active">True</property>
-    <property name="draw_indicator">True</property>
+  <object class="GtkAdjustment" id="adjustment2">
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
   </object>
-  <object class="GtkDialog" id="dialog1">
+  <object class="GtkDialog" id="dialog">
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
     <property name="type_hint">dialog</property>
@@ -33,7 +25,7 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="button2">
+              <object class="GtkButton" id="cmdCancel">
                 <property name="label" translatable="yes">Cancel</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -46,8 +38,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button1">
-                <property name="label" translatable="yes">Ok</property>
+              <object class="GtkButton" id="cmdOk">
+                <property name="label" translatable="yes">OK</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -124,7 +116,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkFontButton" id="fontbutton1">
+                              <object class="GtkFontButton" id="fontbutton">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
@@ -132,6 +124,8 @@
                                 <property name="preview_text"></property>
                                 <property name="show_preview_entry">False</property>
                                 <property name="font_name">Sans 6</property>
+                                <property name="show_style">False</property>
+                                <property name="show_size">False</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -141,7 +135,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkSpinButton" id="spinbutton1">
+                              <object class="GtkSpinButton" id="spin_btn_font_size">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="invisible_char">●</property>
@@ -173,7 +167,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton8">
+                  <object class="GtkCheckButton" id="chk_wordwrap">
                     <property name="label" translatable="yes">Enable Wordwraping</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -188,7 +182,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton9">
+                  <object class="GtkCheckButton" id="chk_curr_line">
                     <property name="label" translatable="yes">Highlight Current Line</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -203,7 +197,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton10">
+                  <object class="GtkCheckButton" id="chk_matching_brace">
                     <property name="label" translatable="yes">Highlight Matching Brace</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -256,7 +250,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="entry3">
+                      <object class="GtkEntry" id="entry_dec_indent_syms">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
@@ -270,7 +264,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="entry2">
+                      <object class="GtkEntry" id="entry_inc_indent_syms">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
@@ -279,20 +273,6 @@
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkEntry" id="entry1">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
-                        <property name="invisible_char_set">True</property>
-                      </object>
-                      <packing>
-                        <property name="left_attach">1</property>
-                        <property name="top_attach">1</property>
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
@@ -326,7 +306,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkCheckButton" id="checkbutton1">
+                      <object class="GtkCheckButton" id="chk_indentation">
                         <property name="label" translatable="yes">Enable Indentation</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
@@ -356,10 +336,34 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="spinbutton3">
+                      <object class="GtkSpinButton" id="spin_indent_width">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="max_length">9</property>
+                        <property name="invisible_char">●</property>
+                        <property name="width_chars">0</property>
+                        <property name="adjustment">adjustment1</property>
+                        <property name="climb_rate">1</property>
+                        <property name="snap_to_ticks">True</property>
+                        <property name="numeric">True</property>
+                      </object>
+                      <packing>
+                        <property name="left_attach">1</property>
+                        <property name="top_attach">1</property>
+                        <property name="width">1</property>
+                        <property name="height">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton" id="spinbutton1">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
+                        <property name="adjustment">adjustment2</property>
+                        <property name="climb_rate">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -367,9 +371,6 @@
                         <property name="width">1</property>
                         <property name="height">1</property>
                       </packing>
-                    </child>
-                    <child>
-                      <placeholder/>
                     </child>
                   </object>
                   <packing>
@@ -401,7 +402,7 @@
                 <property name="orientation">vertical</property>
                 <property name="spacing">2</property>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton2">
+                  <object class="GtkCheckButton" id="chk_code_folding">
                     <property name="label" translatable="yes">Enable Code Folding</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -433,7 +434,7 @@
                             <property name="can_focus">False</property>
                             <property name="orientation">vertical</property>
                             <child>
-                              <object class="GtkCheckButton" id="checkbutton3">
+                              <object class="GtkCheckButton" id="chk_fold_comments">
                                 <property name="label" translatable="yes">Comments</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
@@ -448,7 +449,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkCheckButton" id="checkbutton4">
+                              <object class="GtkCheckButton" id="chk_fold_functions">
                                 <property name="label" translatable="yes">Functions</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
@@ -463,7 +464,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkCheckButton" id="checkbutton5">
+                              <object class="GtkCheckButton" id="chk_fold_classes">
                                 <property name="label" translatable="yes">Classes</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
@@ -520,7 +521,7 @@
                 <property name="can_focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton6">
+                  <object class="GtkCheckButton" id="chk_code_completion">
                     <property name="label" translatable="yes">Enable Code Completion</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -535,7 +536,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton7">
+                  <object class="GtkCheckButton" id="chk_variable_scoping">
                     <property name="label" translatable="yes">Enable Variable Scoping</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -572,7 +573,7 @@
                 <property name="orientation">vertical</property>
                 <property name="spacing">6</property>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton11">
+                  <object class="GtkCheckButton" id="chk_line_numbers">
                     <property name="label" translatable="yes">Enable Line Numbers</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -605,10 +606,11 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="spinbutton2">
+                      <object class="GtkSpinButton" id="spin_line_numbers_font_size">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
+                        <property name="climb_rate">1</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -633,6 +635,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="margin_bottom">2</property>
                 <property name="label" translatable="yes">Line Numbers</property>
               </object>
               <packing>
@@ -646,7 +649,7 @@
                 <property name="can_focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkCheckButton" id="checkbutton12">
+                  <object class="GtkCheckButton" id="chk_syntax_highlighting">
                     <property name="label" translatable="yes">Enable Syntax Highlighting</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
@@ -1056,8 +1059,26 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">button2</action-widget>
-      <action-widget response="0">button1</action-widget>
+      <action-widget response="0">cmdCancel</action-widget>
+      <action-widget response="0">cmdOk</action-widget>
     </action-widgets>
+  </object>
+  <object class="GtkRadioButton" id="radiobutton5">
+    <property name="label" translatable="yes">radiobutton</property>
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="receives_default">False</property>
+    <property name="xalign">0</property>
+    <property name="active">True</property>
+    <property name="draw_indicator">True</property>
+  </object>
+  <object class="GtkRadioButton" id="radiobutton6">
+    <property name="label" translatable="yes">radiobutton</property>
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="receives_default">False</property>
+    <property name="xalign">0</property>
+    <property name="active">True</property>
+    <property name="draw_indicator">True</property>
   </object>
 </interface>

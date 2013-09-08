@@ -8,10 +8,14 @@
 
 #define RESTART_MSG "\n\n############Restarting Shell###############\n\n"
 
+extern char *env_python_path;
+
 GtkBuilder *python_shell_builder;
 static gboolean python_shell_loaded = FALSE;
 extern GtkWidget *status_bar;
 extern ChildProcessData *python_shell_data;
+
+extern gIDLEOptions options;
 
 static void
 show_python_shell_win ();
@@ -41,7 +45,7 @@ load_python_shell ()
         return;
     }
 
-    char *py_argv[] = {python_shell_path, NULL};
+    char *py_argv[] = {options.python_shell_path, NULL};
     if (!execute_python_shell (NULL, py_argv))
        return;
     
@@ -69,16 +73,16 @@ run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv[], gchar 
     /* Run all the commands in one go using "&&" */
     /*Setting Kivy environment variable
      * remove it and move it to options */
-     GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
-
-   /* Setting curr_dir */
+    GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
+ 
+    /* Setting curr_dir */
     if (curr_dir)
     {
         gstr_argv = g_string_append (gstr_argv, "cd ");
         gstr_argv = g_string_append (gstr_argv, curr_dir);
         gstr_argv = g_string_append (gstr_argv, " && ");
     }
-   
+
     gstr_argv = g_string_append (gstr_argv, "python ");
     gstr_argv = g_string_append (gstr_argv, filename);
     
@@ -116,10 +120,10 @@ show_python_shell_win ()
 
     g_signal_connect (G_OBJECT (python_shell_win), "destroy",
                      G_CALLBACK (python_shell_destroy), NULL);
-    
+
     python_shell_source_buffer = gtk_source_buffer_new (NULL);
     python_shell_source_view = gtk_source_view_new_with_buffer (python_shell_source_buffer);
-    
+
     gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (python_shell_source_view), 
                                   GTK_WRAP_WORD);
 
@@ -128,18 +132,18 @@ show_python_shell_win ()
 
     gtk_container_add (GTK_CONTAINER (gtk_builder_get_object (python_shell_builder, "scroll_win")),
                        python_shell_source_view);
-    
+
     GtkSourceLanguageManager *languagemanager = gtk_source_language_manager_new();
     GtkSourceLanguage *language = gtk_source_language_manager_guess_language (languagemanager, "file.py", NULL);
     gtk_source_buffer_set_language (python_shell_source_buffer, language);
-    
+
     /* Connecting activate signals to File menu items */
     g_signal_connect (gtk_builder_get_object (python_shell_builder, "file_import_module"), "activate",
                      G_CALLBACK (file_import_module_activate), NULL);
     g_signal_connect (gtk_builder_get_object (python_shell_builder, "file_save"), "activate",
                      G_CALLBACK (file_save_activate), NULL);
      /************************************/
-    
+
     /*Connecting activate signals of Edit menu items */
     g_signal_connect (gtk_builder_get_object (python_shell_builder, "edit_undo"), "activate",
                      G_CALLBACK (py_shell_edit_undo_activate), NULL);
@@ -195,7 +199,6 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
     
     //status = g_io_channel_read_chars (channel, buffer, 255, &size_read, NULL);
     //if (status != G_IO_STATUS_ERROR)
-    
     if (read (python_shell_data->master_fd, buffer, 1024) != 0)
     {
         if (!shell_str)
@@ -227,7 +230,7 @@ read_masterFd (GIOChannel *channel, GIOCondition condition, gpointer data)
                         gtk_main_iteration_do (FALSE);
 
                     /* Executing new python shell process */
-                    char *py_argv[] = {python_shell_path, NULL};
+                    char *py_argv[] = {options.python_shell_path, NULL};
                     if (!execute_python_shell (NULL, py_argv))
                        return;
 
@@ -255,7 +258,7 @@ close_python_shell_process ()
                                                              NULL, NULL);    
     GFileInfo *folder_info;
     GError *error = NULL;
-
+    int pid;
     while (enumerator && 
            (folder_info = g_file_enumerator_next_file (enumerator, NULL, &error)))
     {
@@ -298,23 +301,22 @@ close_python_shell_process ()
                 if (g_strtod (g_ppid->str, NULL) == python_shell_data->pid)
                 {
                     /* Found the process with PPID equal to PID of Terminal */
-                    gchar *pid = g_strstr_len (contents, -1, "Pid:");
+                    gchar *str_pid = g_strstr_len (contents, -1, "Pid:");
                     g_ppid = g_string_erase (g_ppid, 0, -1);
-                    if (pid)
+                    if (str_pid)
                     {
-                        pid += strlen ("Pid:");
-                        pid--;
-                        while (*(++pid) != '\n')
+                        str_pid += strlen ("Pid:");
+                        str_pid--;
+                        while (*(++str_pid) != '\n')
                         {
-                            if (isdigit (*pid))
-                                g_string_append_c (g_ppid, *pid);
+                            if (isdigit (*str_pid))
+                                g_string_append_c (g_ppid, *str_pid);
                         }
-                    
-                    int pid = g_strtod (g_ppid->str, NULL);
-                    
+
+                    pid = g_strtod (g_ppid->str, NULL);
                     /* Kill the process */
-                    kill (pid, SIGTERM);
-                    
+                    kill (pid, SIGKILL);
+
                     /* Wait for the python to terminate */
                     int status;
                     waitpid (pid, &status, 0);
@@ -395,7 +397,7 @@ execute_python_shell (gchar *curr_dir, char *argv[])
     
     /*Setting Kivy environment variable
      * remove it and move it to options */
-    GString *str  = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo/kivy && ");
+    GString *str  = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
     str = g_string_append (str, python_shell_data->argv [0]);
 
     /* Running Python Shell with argv */
@@ -438,7 +440,7 @@ python_shell_text_view_append_output (gchar *text, gssize len)
         int i;
 
         if (strrchr (prev_line_text, ':') != NULL)
-            indentation += indent_width;
+            indentation += options.indent_width;
 
         gchar indent_str [indentation];
         for (i = 0; i < indentation; i++)
@@ -640,7 +642,7 @@ _shell_restart (gpointer data)
     gtk_text_buffer_append (buffer, RESTART_MSG, -1);
 
     /* Executing new python shell process */
-    char *py_argv[] = {python_shell_path, NULL};
+    char *py_argv[] = {options.python_shell_path, NULL};
     if (!execute_python_shell (NULL, py_argv))
        return FALSE;
 

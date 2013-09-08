@@ -2,6 +2,8 @@
 #include "codewidget.h"
 #include "main.h"
 
+extern gIDLEOptions options;
+
 /*To create new 
  * code_folding_widget
  */
@@ -224,7 +226,7 @@ code_folding_button_press (GtkWidget *widget, GdkEvent *event, gpointer data)
 void
 code_folding_widget_draw (GtkWidget *widget, cairo_t *cr, gpointer data)
 {
-    if (!is_code_folding)
+    if (!options.is_code_folding)
         return;
     
     CodeWidget *codewidget = (CodeWidget *)data;

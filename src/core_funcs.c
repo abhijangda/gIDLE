@@ -1,48 +1,13 @@
 #include "core_funcs.h"
 #include "menus.h"
 #include "main.h"
+#include "proj_notebook.h"
 
 #include <gtk/gtk.h>
 #include <string.h>
 #include <ctype.h>
 
 extern GtkWidget *status_bar;
-
-static void
-_recursively_insert_into_proj_tree_view (GFile *dir, GtkTreeIter *parent)
-{
-    GFileEnumerator *enumerator;
-    enumerator = g_file_enumerate_children (dir,
-                                            G_FILE_ATTRIBUTE_STANDARD_NAME
-                                            "," 
-                                            G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                            G_FILE_QUERY_INFO_NONE,
-                                            NULL, NULL);
-    if (!enumerator)
-        return;
-
-    GFileInfo *fileinfo;
-
-    while ((fileinfo = g_file_enumerator_next_file (enumerator, NULL, NULL)) != NULL)
-    {
-        GtkTreeIter dir_iter;
-        const gchar *file_name = g_file_info_get_name (fileinfo);
-        
-        gtk_tree_store_append (proj_tree_store, &dir_iter, parent);
-        gtk_tree_store_set (proj_tree_store, &dir_iter,
-                             0, file_name, -1);
-
-     if (g_file_info_get_file_type (fileinfo) == G_FILE_TYPE_DIRECTORY)
-        {
-            GFile *child_dir = g_file_get_child (dir, file_name);
-            _recursively_insert_into_proj_tree_view (child_dir, &dir_iter);
-
-            g_object_unref (child_dir);
-        }
-        g_object_unref (fileinfo);
-    }
-    g_object_unref (enumerator);
-}
 
 gboolean
 open_project_from_file (gchar *proj_file)
@@ -64,7 +29,7 @@ open_project_from_file (gchar *proj_file)
         project_destroy (current_project);
         current_project = NULL;
 
-        gtk_tree_store_clear (proj_tree_store);
+        project_notebook_clear (PROJECT_NOTEBOOK (proj_notebook));
     }
 
     gchar *file_data = get_file_data (proj_file);
@@ -85,53 +50,9 @@ open_project_from_file (gchar *proj_file)
 
     g_free (file_data);
 
-    GtkTreeIter iter;
-    gtk_tree_store_append (proj_tree_store, &iter, NULL);
-    gtk_tree_store_set (proj_tree_store, &iter,
-                                  0, current_project->name, -1);
+    project_notebook_open_project (PROJECT_NOTEBOOK (proj_notebook), current_project);
 
-    GFile *proj_dir = g_file_new_for_path (current_project->proj_dir);
-    GFileEnumerator *enumerator;
-    enumerator = g_file_enumerate_children (proj_dir,
-                                            G_FILE_ATTRIBUTE_STANDARD_NAME
-                                            "," 
-                                            G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                            G_FILE_QUERY_INFO_NONE,
-                                            NULL, NULL);
-    if (!enumerator)
-    {
-        project_destroy (current_project);
-        current_project = NULL;
-        gtk_statusbar_push (GTK_STATUSBAR (status_bar),
-                             0, "Cannot Open Project.");
-        return;
-    }
-
-    GFileInfo *fileinfo;
-
-    while ((fileinfo = g_file_enumerator_next_file (enumerator, NULL, NULL)) != NULL)
-    {
-        GtkTreeIter dir_iter;
-        const gchar *file_name = g_file_info_get_name (fileinfo);
-
-        gtk_tree_store_append (proj_tree_store, &dir_iter, &iter);
-        gtk_tree_store_set (proj_tree_store, &dir_iter,
-                             0, file_name, -1);
-
-     if (g_file_info_get_file_type (fileinfo) == G_FILE_TYPE_DIRECTORY)
-        {
-            GFile *file = g_file_get_child (proj_dir, file_name);
-            _recursively_insert_into_proj_tree_view (file, &dir_iter);
-
-            g_object_unref (file);
-        }
-        g_object_unref (fileinfo);
-    }
-    
-    g_object_unref (proj_dir);
-    g_object_unref (enumerator);
-
-    set_mode (GIDLE_MODE_PROJECT);   
+    set_mode (GIDLE_MODE_PROJECT);
 }
 
 gchar *
@@ -310,10 +231,34 @@ get_file_data (char *file_path)
 gboolean
 open_file_at_index (char *file_path, int index)
 {
+    int _index;
+    /*If filename is already open then set filename's page as current page*/
+    for (_index = 0; _index < get_total_pages(); _index++)
+    {
+        if (code_widget_array [_index]->file_path && 
+            strcmp(file_path, code_widget_array [_index]->file_path) == 0)
+             break;
+    }
+   
+    if (_index != get_total_pages())
+    {
+        gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), _index);
+        return TRUE;
+    }
+
     gchar *file_str = get_file_data (file_path);
     if (!file_str)
         return FALSE;
-    
+
+    if (index != -1 && (code_widget_array [index]->file_path != NULL ||
+           strcmp (get_text_at_index (index), "")) != 0 )
+        file_new_tab_activate (NULL);
+
+    else if (index == -1)
+         file_new_tab_activate (NULL);
+
+    index = get_current_index ();
+
     code_widget_array [index]->file_path = g_strdup (file_path);
     codewidget_set_text (code_widget_array [index], file_str);
     code_widget_array [index]->file_mode = FILE_EXISTS;
@@ -678,6 +623,9 @@ gtk_text_buffer_get_matching_parethesis_pos (GtkTextBuffer *buffer, gint pos, gc
 int
 get_indent_spaces_in_string (char *string)
 {
+    if (!string)
+        return 0;
+
     int i, count = 0;
     for (i = 0; i<strlen (string); i++)
     {
@@ -848,6 +796,9 @@ gtk_text_buffer_get_line_text (GtkTextBuffer *buffer, int line_index, gboolean s
 gchar *
 get_text_between_strings (gchar *text, gchar *start, gchar *end)
 {
+    if (!start || !end)
+        return NULL;
+
     gchar *new_str = g_malloc ((end - start+2)*sizeof (gchar));
     gchar *p = start;
     gchar *q = new_str;

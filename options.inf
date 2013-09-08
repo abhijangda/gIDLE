@@ -1,0 +1,18 @@
+<font_name>Monospace 9</font_name>
+<font_size>9</font_size>
+<word_wrap>0</word_wrap>
+<curr_line>0</curr_line>
+<matching_brace>1</matching_brace>
+<indentation>1</indentation>
+<indent_width>4</indent_width>
+<inc_indent_syms></inc_indent_syms>
+<dec_indent_syms></dec_indent_syms>
+<tab_width>0</tab_width>
+<enable_folding>1</enable_folding>
+<fold_comments>1</fold_comments>
+<fold_classes>1</fold_classes><fold_functions>1</fold_functions>
+<completion>1</completion>
+<variable_scoping>1</variable_scoping>
+<line_numbers>1</line_numbers>
+<line_numbers_font_size>0</line_numbers_font_size>
+<syntax_highlighting>1</syntax_highlighting>

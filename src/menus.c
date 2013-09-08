@@ -9,6 +9,8 @@
 #include "run_script_dialog.h"
 #include "class_browser.h"
 #include "new_proj_dlg.h"
+#include "proj_pref_dialog.h"
+#include "options_dialog.h"
 
 #include <string.h>
 
@@ -20,6 +22,7 @@ extern gchar *search_text;
 extern GtkWidget *status_bar;
 extern ChildProcessData *python_shell_data;
 extern GtkWidget *python_shell_win;
+extern gIDLEOptions options;
 
 void
 file_new_activate (GtkWidget *widget)
@@ -83,10 +86,6 @@ file_open_activate (GtkWidget *widget)
 {
     int index = get_current_index ();
 
-    if (index == -1)
-        file_new_tab_activate (NULL);
-    
-    index = get_current_index ();
     /* Check if file has modified since last save */    
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File", GTK_WINDOW (window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -97,39 +96,15 @@ file_open_activate (GtkWidget *widget)
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), py_filter);
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), all_filter);
 
-    if (code_widget_array [index]->file_path)
+    if (index != -1 && code_widget_array [index]->file_path)
         gtk_file_chooser_set_filename (GTK_FILE_CHOOSER (dialog),
                                          code_widget_array [index]->file_path);
 
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
         char *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-        index = get_current_index ();
 
-        /*If filename is already open then set filename's page as current page*/
-        for (index = 0; index < get_total_pages(); index++)
-        {
-            if (code_widget_array [index]->file_path && 
-                strcmp(filename, code_widget_array [index]->file_path) == 0)
-                 break;
-        }
-       
-        if (index != get_total_pages())
-        {
-            gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), index);
-            gtk_widget_destroy (dialog);
-            return;
-        }
-
-        index = get_current_index ();
-
-        if (code_widget_array [index]->file_path != NULL ||
-           strcmp (get_text_at_index (index), "") != 0 )
-            file_new_tab_activate (NULL);
-
-        index = get_current_index ();
-
-        if (!open_file_at_index (filename, index))
+        if (!open_file_at_index (filename, -1))
         {
             //Error Cannot open
             show_error_message_dialog ("Cannot open file!");
@@ -823,7 +798,7 @@ format_inc_indent_activate (GtkWidget *widget)
     for (line =  first_line; line <= last_line; line++)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
-        gtk_text_buffer_insert (buffer, &iter, indent_width_str, -1);
+        gtk_text_buffer_insert (buffer, &iter, options.indent_width_str, -1);
     }
 }
 
@@ -849,12 +824,12 @@ format_dec_indent_activate (GtkWidget *widget)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
         gchar *text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
-        if (get_indent_spaces_in_string (text) < indent_width)
+        if (get_indent_spaces_in_string (text) < options.indent_width)
             continue;
 
-        gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, indent_width);
+        gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, options.indent_width);
         text = gtk_text_buffer_get_text (buffer, &iter, &iter1, TRUE);
-        if (g_strcmp0 (text, indent_width_str) != 0)
+        if (g_strcmp0 (text, options.indent_width_str) != 0)
              continue;
         gtk_text_buffer_delete (buffer, &iter, &iter1);
     }
@@ -881,7 +856,7 @@ format_comment_out_activate (GtkWidget *widget)
     for (line =  first_line; line <= last_line; line++)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
-        gtk_text_buffer_insert (buffer, &iter, comment_out_str, -1);
+        gtk_text_buffer_insert (buffer, &iter, options.comment_out_str, -1);
     }
 }
 
@@ -907,12 +882,12 @@ format_uncomment_out_activate (GtkWidget *widget)
     {
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
         gtk_text_buffer_get_line_end_iter (buffer, &iter1, line);
-        if (gtk_text_iter_get_line_offset (&iter1) < strlen (comment_out_str))
+        if (gtk_text_iter_get_line_offset (&iter1) < strlen (options.comment_out_str))
              continue;
 
-        gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, strlen (comment_out_str));
+        gtk_text_buffer_get_iter_at_line_offset (buffer, &iter1, line, strlen (options.comment_out_str));
         gchar *text = gtk_text_buffer_get_text (buffer, &iter, &iter1, TRUE);
-        if (g_strcmp0 (text, comment_out_str) != 0)
+        if (g_strcmp0 (text, options.comment_out_str) != 0)
              continue;
         gtk_text_buffer_delete (buffer, &iter, &iter1);
     }
@@ -947,7 +922,7 @@ format_tabify_region_activate (GtkWidget *widget)
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
         
         int i;
-        for (i = 0; i <count_spaces/tab_width; i++)
+        for (i = 0; i <count_spaces/options.tab_width; i++)
             gtk_text_buffer_insert (buffer, &iter, "\t", -1);
     }
 }
@@ -989,7 +964,7 @@ format_untabify_region_activate (GtkWidget *widget)
         gtk_text_buffer_get_iter_at_line (buffer, &iter, line);
        
         for (i = 0; i <count_tabs; i++)
-            gtk_text_buffer_insert (buffer, &iter, tab_width_str, -1);
+            gtk_text_buffer_insert (buffer, &iter, options.tab_width_str, -1);
     }
 }
 
@@ -1384,7 +1359,7 @@ project_new_activate (GtkWidget *widget)
     Project *proj = create_new_project (GTK_WINDOW (window));
     if (!proj)
         return;
-    
+
     if (!project_create_files_and_dirs (proj, NULL))
     {
         gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "Cannot create project");
@@ -1416,6 +1391,15 @@ project_open_activate (GtkWidget *widget)
 void
 project_save_activate (GtkWidget *widget)
 {
+    int i;
+    int index = get_current_index ();
+    for (i = 0; i < get_total_pages (); i++)
+    {
+        gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), i);
+        file_save_activate (NULL);
+    }
+    
+    gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), index);
 }
 
 void
@@ -1436,11 +1420,27 @@ project_empty_activate (GtkWidget *widget)
 void
 project_close_activate (GtkWidget *widget)
 {
+    GtkWidget *dialog;
+    dialog = gtk_message_dialog_new (GTK_WINDOW (window),
+                                    GTK_DIALOG_DESTROY_WITH_PARENT, 
+                                    GTK_MESSAGE_QUESTION,
+                                    GTK_BUTTONS_YES_NO,
+                                    "Do you want to close the current project?");
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_NO)
+    {
+        gtk_widget_destroy (dialog);
+        return;
+    }
+    gtk_widget_destroy (dialog);
+    
+    project_destroy (current_project);
+    current_project = NULL;
 }
 
 void
 project_preferences_activate (GtkWidget *widget)
 {
+    open_proj_pref ();
 }
 
 void
@@ -1504,6 +1504,7 @@ debug_open_pdb_shell_activate (GtkWidget *widget)
 void
 tools_options_activate (GtkWidget *widget)
 {
+    load_options_dlg ();
 }
 
 void

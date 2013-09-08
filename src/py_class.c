@@ -112,6 +112,18 @@ py_class_dup (PyVariable *class)
     new_class->nested_classes = nested_classes;
     new_class->nested_classes_size = nested_classes_size;
     new_class->base_classes_size = base_classes_size;
+    
+    PyStaticVar **static_varv = NULL;
+    int static_varv_size = 0;
+    
+    for (i = 0; i < _class->py_static_var_array_size; i++)
+    {
+        py_static_varv_add_py_static_var (&static_varv, &static_varv_size, _class->py_static_var_array [i]);
+    }
+    
+    new_class->py_static_var_array_size = static_varv_size;
+    new_class->py_static_var_array = static_varv;
+
     py_variable_set_doc_string (PY_VARIABLE (new_class), class->doc_string);
     return PY_VARIABLE (new_class);
 }

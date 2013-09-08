@@ -8,6 +8,14 @@
 #define CODE_ASSIST_WIDTH 300
 #define CODE_ASSIST_HEIGHT 200
 
+enum
+{
+    ASSIST_COL_PIXBUF = 0,
+    ASSIST_COL_DEF,
+    ASSIST_COL_POINTER,
+    ASSIST_COL_TOTAL,
+};
+
 struct _code_assist
 {
     GtkWidget *list_view;

@@ -19,10 +19,17 @@ code_assist_widget_new()
                        G_CALLBACK (_code_assist_tree_selection_changed),
                        _code_assist);
 
-    _code_assist->list_store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_POINTER);
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
-    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes ("Suggestions",
-                                                                           renderer, "text", 0, NULL);
+    _code_assist->list_store = gtk_list_store_new (ASSIST_COL_TOTAL, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_POINTER);
+    GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new ();
+    GtkTreeViewColumn *column = gtk_tree_view_column_new ();
+
+    gtk_tree_view_column_pack_start (column, renderer, FALSE);
+    gtk_tree_view_column_set_attributes (column,
+                                                                     renderer, "pixbuf", ASSIST_COL_PIXBUF , NULL);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    gtk_tree_view_column_pack_start (column, renderer, FALSE);
+    gtk_tree_view_column_add_attribute (column, renderer, "text", ASSIST_COL_DEF);
 
     gtk_tree_view_append_column (GTK_TREE_VIEW (_code_assist->list_view), column);
     gtk_tree_view_set_model (GTK_TREE_VIEW (_code_assist->list_view),
@@ -72,14 +79,40 @@ code_assist_widget_new()
 }
 
 void
-code_assist_add_py_var (CodeAssistWidget *code_assist, PyVariable *py_var)
+_code_assist_show_py_var (CodeAssistWidget *code_assist, PyVariable *py_var)
 {
     GtkTreeIter iter;
     gtk_list_store_append (code_assist->list_store, &iter);
+    
+    GdkPixbuf *pixbuf;
+    
+    if (py_var->type == FUNC)
+    {
+        pixbuf = gdk_pixbuf_new_from_file ("./icons/func.png", NULL);
+    }
+    else if (py_var->type == CLASS)
+    {
+        pixbuf = gdk_pixbuf_new_from_file ("./icons/class.png", NULL);
+    }
+    else if (py_var->type == MODULE)
+    {
+        pixbuf = gdk_pixbuf_new_from_file ("./icons/module.png", NULL);
+    }
+    else if (py_var->type == STATIC_VAR)
+    {
+        pixbuf = gdk_pixbuf_new_from_file ("./icons/field.png", NULL);
+    }
     gtk_list_store_set (code_assist->list_store, &iter,
-                              0, py_var->get_definition (py_var),
-                              1, py_var, -1);
+                              ASSIST_COL_PIXBUF, pixbuf,
+                              ASSIST_COL_DEF, py_var->get_definition (py_var),
+                              ASSIST_COL_POINTER, py_var, -1);
+    g_object_unref (pixbuf);
+}
 
+void
+code_assist_add_py_var (CodeAssistWidget *code_assist, PyVariable *py_var)
+{
+    _code_assist_show_py_var (code_assist, py_var);
     py_variablev_add_variable (&(code_assist->py_var_array), 
                                 &(code_assist->py_var_array_size), py_var);
 }
@@ -97,17 +130,22 @@ code_assist_show_matches (CodeAssistWidget *code_assist, gchar *string)
     {
         if (g_strstr_len (code_assist->py_var_array [i]->name, -1, string))
         {
-            GtkTreeIter iter;
-            gtk_list_store_append (code_assist->list_store, &iter);
-            gtk_list_store_set (code_assist->list_store, &iter,
-                                      0, code_assist->py_var_array [i]->get_definition (code_assist->py_var_array [i]),
-                                      1, code_assist->py_var_array [i], -1);
+            _code_assist_show_py_var (code_assist, code_assist->py_var_array [i]);
             found = TRUE;
         }
     }
     if (!found)
         return FALSE;
     
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (code_assist->list_view));
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (code_assist->list_store), &tree_iter);
+
+    if (!gtk_list_store_iter_is_valid (code_assist->list_store, &tree_iter))
+        return FALSE;
+    
+    //gtk_widget_grab_focus (codewidget->code_assist_widget->list_view);
+    gtk_tree_selection_select_iter (selection, &tree_iter);
+
     return TRUE;
 }
 
@@ -133,7 +171,7 @@ _code_assist_tree_selection_changed (GtkTreeSelection *selection, gpointer data)
         return;
 
     gpointer value;
-    gtk_tree_model_get (GTK_TREE_MODEL (code_assist_widget->list_store), &tree_iter, 1, &value, -1);
+    gtk_tree_model_get (GTK_TREE_MODEL (code_assist_widget->list_store), &tree_iter, ASSIST_COL_POINTER, &value, -1);
     PyVariable *py_var = PY_VARIABLE (value);
     if (!py_var)
         return;

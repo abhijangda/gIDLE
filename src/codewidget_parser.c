@@ -18,6 +18,7 @@ extern GRegex *regex_global_var, *regex_static_var;
 extern GRegex *regex_self_var;
 
 extern char *sys_path_string;
+extern gIDLEOptions options;
 
 static void
 _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distream, PyModule **_module, PyClass **klass);
@@ -781,7 +782,7 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
             gchar *class_def_string = g_match_info_fetch (match_info_class,0);
             class_def_string = remove_char (class_def_string, ':');
     
-            indentation = get_indent_spaces_in_string (class_def_string) / indent_width;
+            indentation = get_indent_spaces_in_string (class_def_string) / options.indent_width;
             if (indentation > 0 && !klass)
             {
                 g_free (class_def_string);
@@ -819,7 +820,7 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
             gchar *func_def_string = g_match_info_fetch(match_info_func,0);
             can_find_static = FALSE;
             func_def_string = remove_char (func_def_string, ':');
-            indentation = get_indent_spaces_in_string (func_def_string) / indent_width;
+            indentation = get_indent_spaces_in_string (func_def_string) / options.indent_width;
             PyFunc *py_func = py_func_new_from_def (func_def_string, 0,
                                                    indentation);
 
@@ -854,7 +855,7 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
                  */
                 while ((line = g_file_input_stream_read_line (*distream)))
                 {
-                    int indentation2 = get_indent_spaces_in_string (line) / indent_width;
+                    int indentation2 = get_indent_spaces_in_string (line) / options.indent_width;
                     if (indentation2 == indentation)
                     {
                         g_seekable_seek (G_SEEKABLE (*distream),
@@ -899,6 +900,7 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
                     }
                 g_free (line);
                 line = NULL;
+                continue;
                 }                
             }
         }
@@ -929,7 +931,7 @@ _codewidget_parser_parse_lines (CodeWidget *codewidget, GFileInputStream **distr
         /*If indentation of current line is less than current class
          * indentation then go to previous class
          */   
-        indentation = get_indent_spaces_in_string (line) / indent_width;
+        indentation = get_indent_spaces_in_string (line) / options.indent_width;
         if (klass && indentation < (*klass)->indentation)
             return;
 

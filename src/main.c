@@ -3,8 +3,12 @@
 #include "toolbar.h"
 #include "python_shell.h"
 #include "py_variable.h"
+#include "core_funcs.h"
+#include "proj_notebook.h"
 
 int mode = -1;
+
+char *env_python_path;
 
 static gboolean
 delete_event (GtkWidget *widget, GdkEvent *event);
@@ -23,16 +27,13 @@ GAsyncQueue *async_queue;
 GtkBuilder *builder;
 extern gchar *search_text;
 GtkWidget *status_bar;
-GtkWidget *proj_tree_view_scrollwin;
 
 ChildProcessData *python_shell_data;
 gboolean bash_loaded;
-char *font_name;
 char *sys_path_string;
 char *python_sys_script_path = "./scripts/path.py";
 
-static gboolean
-proj_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *event, gpointer data);
+gIDLEOptions options;
 
 int
 main (int argc, char *argv [])
@@ -53,13 +54,17 @@ main (int argc, char *argv [])
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
 
     /**********/
-
+    env_python_path = "/home/abhi/kivy_repo/kivy";
     /*Get sys.path*/
     char *sys_path_argv[] = {"python", "./scripts/path.py", NULL}; 
     g_spawn_sync (NULL, sys_path_argv, NULL, G_SPAWN_SEARCH_PATH,
                                NULL, NULL, &sys_path_string, NULL, NULL, NULL);
     /***********/
-
+    
+    char *_str = g_strconcat (sys_path_string, "\n", env_python_path, NULL);
+    g_free (sys_path_string);
+    sys_path_string = _str; 
+    
     /*Setting Main Window*/    
     GtkWidget *navigate_bookmarks;
     builder = gtk_builder_new ();
@@ -69,38 +74,23 @@ main (int argc, char *argv [])
 
     window = gtk_builder_get_object (builder, "main_window");
     g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-
-    proj_tree_view_scrollwin = gtk_scrolled_window_new (NULL, NULL);
-
-    gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (proj_tree_view_scrollwin),
-                                          GTK_SHADOW_IN);
-
-    proj_tree_view = gtk_tree_view_new ();
-    gtk_container_add (GTK_CONTAINER (proj_tree_view_scrollwin), proj_tree_view);
-
-    g_object_ref (proj_tree_view_scrollwin);
-
-    current_project = NULL;
-
-    proj_tree_store = gtk_tree_store_new (1, G_TYPE_STRING);
-
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
-    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes ("Project",
-                                                                           renderer, "text", 0, NULL);
-    gtk_tree_view_append_column (GTK_TREE_VIEW (proj_tree_view), column);
-    gtk_tree_view_set_model (GTK_TREE_VIEW (proj_tree_view),
-                              GTK_TREE_MODEL (proj_tree_store));
-    gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (proj_tree_view),
-                                        TRUE);
     
-    //GtkTreeSelection *proj_tree_selection =  gtk_tree_view_get_selection (GTK_TREE_VIEW (proj_tree_selection));
-    g_signal_connect (G_OBJECT (proj_tree_view), "button-press-event", 
-                        G_CALLBACK (proj_tree_view_dbl_clicked), NULL);
+    proj_notebook = gtk_notebook_new ();
+    g_object_ref (proj_notebook);
 
+    /*Settings proj_dir_tree_view*/
+    proj_notebook = project_notebook_new ();
+    
+    /**Setting proj_syms_tree_view**/
+    symbols_view = symbols_view_new ();
+
+    g_object_ref (symbols_view);
+    /*************************/
     content_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
     g_object_ref (content_paned);
 
     status_bar = gtk_statusbar_new ();
+    g_object_ref (status_bar);
 
     navigate_bookmarks = GTK_WIDGET (gtk_builder_get_object (builder,
                                     "navigate_bookmarks"));
@@ -377,29 +367,32 @@ main (int argc, char *argv [])
     /********************************/
     
     /*Loading Options*/
-    indent_width = 4;
-    indent_width_str = "    ";
-    comment_out_str = "##";
-    tab_width = 4;
-    tab_width_str = "    ";
+    options.indent_width = 4;
+    options.indent_width_str = "    ";
+    options.comment_out_str = "##";
+    options.tab_width = 4;
+    options.tab_width_str = "    ";
+    options.is_code_completion = TRUE;
+    options.is_code_folding = TRUE;
+    options.show_line_numbers = TRUE;
+    options.python_shell_path = "/usr/bin/python";
+    options.font_name = "Liberation Mono";
+    /*************/
+    
+    /*Other global variables*/
     search_text = NULL;
     bookmark_array= NULL;
     bookmark_array_size = 0;
     current_bookmark_index = -1;
-    is_code_completion = TRUE;
-    is_code_folding = TRUE;
-    show_line_numbers = TRUE;
-    python_shell_path = "/usr/bin/python";
-    font_name = "Liberation Mono";
-    /*************/
+    /******************/
 
     /*Initialize Regular Expressions*/
     regex_class = g_regex_new ("[ \\ \\t]*\\bclass\\b\\s*\\w+\\s*\\(*.*\\)*:", 0, 0, NULL);
     regex_func = g_regex_new ("[ \\ \\t]*def\\s+[\\w\\d_]+\\s*\\(.+\\)\\:", 0, 0, NULL);
     
     /*Regex if you don't want to search imports with in indentation*/
-    regex_import = g_regex_new ("^import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
-    regex_import_as = g_regex_new ("^import\\s+[\\w\\d_\\.]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);
+    /*regex_import = g_regex_new ("^import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
+    regex_import_as = g_regex_new ("^import\\s+[\\w\\d_\\.]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);*/
     regex_from_import = g_regex_new ("^from\\s+[\\w\\d_\\.]+\\s+import\\s+[\\w\\d_]+", 0, 0, NULL);
     regex_from_import_as = g_regex_new ("^from\\s+[\\w\\d_\\.]+\\s+import\\s+[\\w\\d_]+as\\s+[\\w\\d_]", 0, 0, NULL);
     regex_global_var = g_regex_new ("^[\\w\\d_]+\\s*=\\s*[\\w\\d_]+\\s*\\(.+\\)", 0, 0, NULL);
@@ -409,9 +402,9 @@ main (int argc, char *argv [])
     regex_self_var = g_regex_new ("^\\s+self\\.[\\w\\d_]+\\s*=.+", 0, 0, NULL);
 
     /*Regex if you want to search imports with in indentation*/
-    /*regex_import = g_regex_new ("^\\s*import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
-     *regex_import_as = g_regex_new ("^\\s*import\\s+[\\w\\d_]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);
-     */
+    regex_import = g_regex_new ("^\\s*import\\s+[\\w\\d_\\.]+", 0, 0, NULL);
+    regex_import_as = g_regex_new ("^\\s*import\\s+[\\w\\d_]+\\s+as\\s+[\\w\\d_]+", 0, 0, NULL);
+
     /***********************/
     
     async_queue = g_async_queue_new ();
@@ -533,46 +526,35 @@ set_mode (int _mode)
     gtk_widget_unparent (status_bar);
     mode = _mode;
     if (gtk_widget_get_parent (notebook))
-        gtk_widget_unparent (notebook);
-    
-    if (gtk_widget_get_parent (content_paned))
-        gtk_widget_unparent (content_paned);
+        gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (notebook)), notebook);
    
-    if (gtk_widget_get_parent (proj_tree_view_scrollwin))
-        gtk_widget_unparent (proj_tree_view_scrollwin);
+    if (gtk_widget_get_parent (proj_notebook))
+        gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (proj_notebook)), proj_notebook);
+    
+    if (!gtk_widget_get_parent (content_paned))
+        gtk_box_pack_start (GTK_BOX (content_box), content_paned, TRUE, TRUE, 0);
+    
+    if (gtk_notebook_get_n_pages (GTK_NOTEBOOK (proj_notebook)) == 3)
+            gtk_notebook_remove_page (GTK_NOTEBOOK (proj_notebook), 2);
+    
+    if (gtk_widget_get_parent (symbols_view))
+         gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (symbols_view)), symbols_view);
 
     if (_mode == GIDLE_MODE_FILE)
     {
-        gtk_box_pack_start (GTK_BOX (content_box), notebook, TRUE, TRUE, 0);
+        gtk_paned_pack1 (GTK_PANED (content_paned), symbols_view, FALSE, FALSE);
+        gtk_paned_pack2 (GTK_PANED (content_paned), notebook, TRUE, TRUE);
     }
     else
     {
-        gtk_box_pack_start (GTK_BOX (content_box), content_paned, TRUE, TRUE, 0);
-        gtk_paned_pack1 (GTK_PANED (content_paned), proj_tree_view_scrollwin, TRUE, TRUE);
+        gtk_notebook_append_page (GTK_NOTEBOOK (proj_notebook), symbols_view, gtk_label_new ("Symbols"));
+        gtk_paned_pack1 (GTK_PANED (content_paned), proj_notebook, FALSE, FALSE);
         gtk_paned_pack2 (GTK_PANED (content_paned), notebook, TRUE, TRUE);
+        gtk_widget_set_size_request (proj_notebook, 200, 200);
     }
 
-    gtk_widget_set_size_request (notebook, 600, 100);
     gtk_box_pack_start (GTK_BOX (content_box), status_bar, FALSE, FALSE, 0);
     gtk_widget_show_all (content_box);
-}
-
-static gboolean
-proj_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *_event, gpointer data)
-{
-    GdkEventButton *event = (GdkEventButton *)_event;
-    if (event->type != GDK_2BUTTON_PRESS || 
-         event->window != gtk_tree_view_get_bin_window (GTK_TREE_VIEW (widget)))
-        return FALSE;
-    
-    int tx, ty;
-    GtkTreePath *path;
-    GtkTreeViewColumn *column;
-    //gtk_tree_view_convert_bin_window_to_tree_coords (GTK_TREE_VIEW (widget), _event->x, _event->y, &tx, &ty);
-    if (!gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (widget), event->x, event->y, &path, &column, NULL, NULL))
-        printf ("sdfsdfdsfsf\n");
-    
-    return FALSE;
 }
 
 static void
@@ -593,4 +575,84 @@ main_window_destroy (GtkWidget *widget)
     kill (python_shell_data->pid, SIGKILL);
     g_free (python_shell_data);
     g_async_queue_unref (async_queue);
+}
+
+void
+apply_changed_option (char *option_name)
+{
+    if (!g_strcmp0 (option_name, "font_name"))
+    {
+        PangoFontDescription *font_desc;
+        font_desc = pango_font_description_from_string (options.font_name);
+        int i;
+        for (i = 0; i < code_widget_array_size; i++)
+            gtk_widget_modify_font (code_widget_array[i]->sourceview, font_desc);
+
+        pango_font_description_free (font_desc);
+    }
+    else if (!g_strcmp0 (option_name, "font_size"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "word_wrap"))
+    {
+        int i;
+        GtkWrapMode wrap_mode;
+        if (options.word_wrap)
+            wrap_mode = GTK_WRAP_WORD;
+        else
+            wrap_mode = GTK_WRAP_NONE;
+        for (i = 0; i < code_widget_array_size; i++)
+            gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (code_widget_array[i]->sourceview), wrap_mode);
+    }
+    else if(!g_strcmp0 (option_name, "highlight_curr_line"))
+    {
+        int i;
+        for (i = 0; i < code_widget_array_size; i++)
+            gtk_source_view_set_highlight_current_line (GTK_SOURCE_VIEW (code_widget_array [i]->sourceview), options.highlight_curr_line);
+    }
+    else if(!g_strcmp0 (option_name, "matching_brace"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "indentation"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "indent_width"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "inc_indent_syms"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "dec_indent_syms"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "tab_width"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "code_folding"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "fold_comments"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "fold_classes"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "fold_functions"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "code_completion"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "variable_scoping"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "line_numbers"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "line_numbers_font_size"))
+    {
+    }
+    else if(!g_strcmp0 (option_name, "syntax_highlighting"))
+    {
+    }
 }

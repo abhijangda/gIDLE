@@ -6,7 +6,7 @@
 #include <string.h>
 
 extern GtkWidget *status_bar;
-extern char *font_name;
+extern gIDLEOptions options;
 
 static void
 _codewidget_parse_function (CodeWidget *codewidget, PyClass *klass, PyFunc *func, int curr_line);
@@ -21,7 +21,7 @@ static int
 _codewidget_get_line_at_multiline_comment_end (GtkTextBuffer *buffer, int line);
 
 static int
-_codewidget_start_parse_from_line (CodeWidget *codewidget, GtkTextBuffer *buffer, int line, PyClass *klass, gboolean);
+_codewidget_start_parse_from_line (CodeWidget *codewidget, GtkTextBuffer *buffer, int line, PyClass **klass, gboolean);
 
 static void
 _codewidget_import_module_async (CodeWidget *codewidget, char *line_text);
@@ -189,8 +189,7 @@ codewidget_new ()
     codewidget->sourceview = gtk_source_view_new_with_buffer (codewidget->sourcebuffer);
  
     /*Set default font*/
-    font_desc = pango_font_description_from_string (font_name);
-    pango_font_description_set_absolute_size (font_desc, 10.5*PANGO_SCALE);
+    font_desc = pango_font_description_from_string (options.font_name);
     gtk_widget_modify_font (codewidget->sourceview, font_desc);
     pango_font_description_free (font_desc);
 
@@ -338,7 +337,7 @@ codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
 {
     CodeWidget *codewidget = (CodeWidget *)data;
     
-    if (!show_line_numbers)
+    if (!options.show_line_numbers)
          return;
     
     GtkTextBuffer *buffer = GTK_TEXT_BUFFER (codewidget->sourcebuffer);
@@ -729,7 +728,7 @@ codewidget_update_class_funcs (CodeWidget *codewidget)
         GTK_TEXT_VIEW (codewidget->sourceview));
 
     int i;
-    for (i = 1; i < codewidget->py_class_array_size; i++)
+    for (i = 0; i < codewidget->py_class_array_size; i++)
     {
         PyVariable *py_var = PY_VARIABLE (codewidget->py_class_array [i]);
         py_var->destroy (py_var);
@@ -737,9 +736,12 @@ codewidget_update_class_funcs (CodeWidget *codewidget)
 
     for (i = codewidget->py_class_array_size; i > 0; i--)
         gtk_combo_box_text_remove (GTK_COMBO_BOX_TEXT (codewidget->class_combobox), i);
-
-    codewidget->py_class_array_size = 1;
-    codewidget->py_nested_class_array_size = 1;
+    
+    codewidget->py_class_array_size = 0;
+    codewidget->py_nested_class_array_size = 0;
+    
+    PyClass *py_class = py_class_new ("Global Scope", NULL, NULL, NULL, -1, 0);
+    codewidget_add_class (codewidget, py_class);
  
     int line = 0;
 
@@ -750,11 +752,12 @@ codewidget_update_class_funcs (CodeWidget *codewidget)
             line = _line + 1;
 
         line = _codewidget_start_parse_from_line (codewidget, text_buffer, line,
-                                                    codewidget->py_class_array[0], FALSE);
+                                                    &(codewidget->py_class_array[0]), FALSE);
     }
 
     _codewidget_link_child_classes_to_their_parents (codewidget);
     get_class_func_callback (NULL, NULL, codewidget);
+    symbols_view_fill_from_codewidget (SYMBOLS_VIEW (symbols_view), codewidget);
 }
 
 static gboolean
@@ -827,7 +830,7 @@ _codewidget_code_list_row_activated (GtkTreeView *view, GtkTreePath *path,
     gpointer value;
     gtk_tree_model_get (
         GTK_TREE_MODEL (codewidget->code_assist_widget->list_store),
-                        &tree_iter, 1, &value, -1);
+                        &tree_iter, ASSIST_COL_POINTER, &value, -1);
     PyVariable *py_var = (PyVariable *) value;
 
     GtkTextIter prev_iter, iter;
@@ -1048,7 +1051,9 @@ get_class_func_callback (GObject *object, GAsyncResult *res, gpointer data)
                          "Parsing files completed");
     
     display_status_bar_message_return_false = TRUE;
-    
+
+    symbols_view_fill_from_codewidget (SYMBOLS_VIEW (symbols_view), codewidget);
+
     /*Set Class and Function according to current position of cursor*/
     /*GtkTextIter current_iter;
     if (!GTK_IS_TEXT_VIEW (codewidget->sourceview))
@@ -1100,7 +1105,7 @@ get_class_funcs_thread_func (GSimpleAsyncResult *res, GObject *object,
             line = _line + 1;
 
         line = _codewidget_start_parse_from_line (codewidget, buffer, line,
-                                                    codewidget->py_class_array[0], TRUE);
+                                                    &(codewidget->py_class_array[0]), TRUE);
     }
     
     _codewidget_link_child_classes_to_their_parents (codewidget);
@@ -1115,8 +1120,9 @@ get_class_funcs_thread_func (GSimpleAsyncResult *res, GObject *object,
 static int
 _codewidget_start_parse_from_line (CodeWidget *codewidget,
                                    GtkTextBuffer *buffer,
-                                   int line, PyClass *klass, gboolean import_module)
+                                   int line, PyClass **_klass, gboolean import_module)
 {
+    PyClass *klass = *_klass;
     GMatchInfo *match_info_class, *match_info_func;
     int indentation=0, start, end, _line;
     char *line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
@@ -1129,7 +1135,7 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
         if (strcmp(g_strstrip(line_text), "") == 0 &&
             indentation - get_indent_spaces_in_string (line_text) > 0)
             return line;
-        
+
         if (import_module)
             check_for_import_module (codewidget, NULL, line_text);
 
@@ -1141,12 +1147,12 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
             gchar *class_def_string = g_match_info_fetch(match_info_class,0);
             class_def_string = remove_char (class_def_string, ':');
 
-            indentation = get_indent_spaces_in_string (class_def_string) / indent_width;
+            indentation = get_indent_spaces_in_string (class_def_string) / options.indent_width;
             PyClass *new_class = py_class_new_from_def (class_def_string, 
                                                         start, indentation);
 
             codewidget_add_class (codewidget, new_class);
-    
+
             g_free (class_def_string);
             
             if (indentation > 0)
@@ -1155,17 +1161,20 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
             }
             
             /*Detecting for class doc strings*/
+            line += 1;
             _line = _codewidget_get_line_at_multiline_comment_end (buffer, line);
-
             if (_line != line)
             {
                 gchar *doc_string = get_doc_string_between_lines (buffer, line, _line);
 
                 py_variable_set_doc_string ((PyVariable *)new_class, doc_string);
                 g_free (doc_string);
+                line = _line;
             }
+           else
+                line -= 1;
 
-            line = _codewidget_start_parse_from_line (codewidget, buffer, line + 1, new_class, import_module);
+            line = _codewidget_start_parse_from_line (codewidget, buffer, line + 1, &new_class, import_module);
             class++;
             g_match_info_free (match_info_class);
         }
@@ -1178,7 +1187,7 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
             gchar *func_def_string = g_match_info_fetch(match_info_func,0);
 
             func_def_string = remove_char (func_def_string, ':');
-            indentation = get_indent_spaces_in_string (func_def_string) / indent_width;
+            indentation = get_indent_spaces_in_string (func_def_string) / options.indent_width;
             PyFunc *py_func = py_func_new_from_def (func_def_string, start,
                                                    indentation);
 
@@ -1218,7 +1227,7 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
                 while (line < gtk_text_buffer_get_line_count (buffer))
                 {
                     line_text = gtk_text_buffer_get_line_text (buffer, line, TRUE);
-                    int indentation2 = get_indent_spaces_in_string (line_text) / indent_width;
+                    int indentation2 = get_indent_spaces_in_string (line_text) / options.indent_width;
                     if (indentation2 == indentation)
                     {
                         line--;
@@ -1256,18 +1265,19 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
                                     gchar *doc_string = get_doc_string_between_lines (buffer, line, _line);
                                     py_variable_set_doc_string (PY_VARIABLE (static_var), doc_string);
                                     g_free (doc_string);
+                                    line = _line;
                                 }
-                                line = _line;
-                           }
-                            else
-                            {
-                                py_static_var_destroy (PY_VARIABLE (static_var));
-                                line += 1;
+                                else
+                                    line -= 1;
                             }
+                            else
+                                py_static_var_destroy (PY_VARIABLE (static_var));
                         }
                         g_match_info_free (match_info_class);
                     }
-                }                
+                    line += 1;
+                }
+            line -= 1;                
             }
         }
         else if (can_find_static && g_regex_match (regex_static_var, line_text ,0, &match_info_class))
@@ -1289,8 +1299,10 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
                     gchar *doc_string = get_doc_string_between_lines (buffer, line, _line);
                     py_variable_set_doc_string (PY_VARIABLE (static_var), doc_string);
                     g_free (doc_string);
+                    line = _line;
                 }
-                line = _line;
+                else
+                    line -= 1;
             }
             g_match_info_free (match_info_class);
         }
@@ -1615,6 +1627,16 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
             }
         }
         
+        /*Add all classes*/
+        for (i = 0; i < codewidget->py_class_array_size; i++)
+        {
+            PyVariable *py_var = PY_VARIABLE (codewidget->py_class_array [i]);
+            if (g_strstr_len (py_var->name, -1, word))
+            {
+                 code_assist_add_py_var (codewidget->code_assist_widget, py_var);
+            }
+        }
+
         /*Add all global variables*/
         for (i = 0; i < codewidget->py_class_array [0]->py_static_var_array_size; i++)
         {
@@ -1632,10 +1654,8 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
             while (*py_func)
             {
                 if (g_strstr_len (PY_VARIABLE (py_func)->name, -1, word))
-                {
                     code_assist_add_py_var (codewidget->code_assist_widget, PY_VARIABLE (*py_func));
-                    py_func++;
-                }
+                py_func++;
             }
         }
 
@@ -1801,7 +1821,7 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
                 indentation = get_indent_spaces_in_string (line_text_till_col);
                 /*Search for ':' in line and increase indentation if found otherwise not*/
                 if (g_strrstr (line_text_till_col, ":"))
-                    indentation += indent_width;
+                    indentation += options.indent_width;
                 
                 gchar *line_after_col = &line_text [col+1];
                 indentation -= get_indent_spaces_in_string (line_after_col);
@@ -1818,10 +1838,10 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
             if (col > indentation || col == 0)
                 return FALSE;
                 
-            if (col % indent_width == 0)
-                new_col = col - indent_width;
+            if (col % options.indent_width == 0)
+                new_col = col - options.indent_width;
             else
-                new_col = col - col % indent_width;
+                new_col = col - col % options.indent_width;
 
             gtk_text_buffer_get_iter_at_line_offset (buffer, &new_iter, line, new_col);
             gtk_text_buffer_place_cursor (buffer, &new_iter);
@@ -1836,10 +1856,10 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
             if (col > indentation || col == 0)
                 return FALSE;
                 
-            if (col % indent_width == 0)
-                new_col = col - indent_width;
+            if (col % options.indent_width == 0)
+                new_col = col - options.indent_width;
             else
-                new_col = col - col % indent_width;
+                new_col = col - col % options.indent_width;
 
             gtk_text_buffer_get_iter_at_line_offset (buffer, &new_iter, line, new_col);
             gtk_text_buffer_delete (buffer, &new_iter, &iter);
