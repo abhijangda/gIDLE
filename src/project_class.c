@@ -52,9 +52,19 @@ project_create_files_and_dirs (Project *proj, GError **error)
     if (!project_write (proj, error))
          return FALSE;
 
+    gchar *main_file = project_get_main_file (proj);
+    g_file_set_contents (main_file, "", -1, NULL);
+    g_free (main_file);
+
     g_object_unref (file);
     g_object_unref (dir);
     return TRUE;
+}
+
+gchar *
+project_get_main_file (Project *proj)
+{
+    return g_build_path ("/", proj->proj_dir, proj->main_file, NULL);
 }
 
 /* To create a new project

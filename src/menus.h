@@ -125,6 +125,10 @@ void
 navigate_go_to_func_def_activate  (GtkWidget *);
 void
 navigate_go_to_line_activate  (GtkWidget *);
+void
+navigate_go_to_next_func_activate (GtkWidget *);
+void
+navigate_go_to_prev_func_activate (GtkWidget *);
 
 //Project Menu
 void

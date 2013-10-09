@@ -81,7 +81,8 @@ am_gIDLE_OBJECTS = src/main.$(OBJEXT) src/codewidget.$(OBJEXT) \
 	src/py_static_var.$(OBJEXT) src/class_browser.$(OBJEXT) \
 	src/project_class.$(OBJEXT) src/new_proj_dlg.$(OBJEXT) \
 	src/symbols_view.$(OBJEXT) src/proj_notebook.$(OBJEXT) \
-	src/proj_pref_dialog.$(OBJEXT) src/options_dialog.$(OBJEXT)
+	src/proj_pref_dialog.$(OBJEXT) src/options_dialog.$(OBJEXT) \
+	src/file_monitor.$(OBJEXT) src/file_modify_box.$(OBJEXT)
 gIDLE_OBJECTS = $(am_gIDLE_OBJECTS)
 am__DEPENDENCIES_1 =
 gIDLE_DEPENDENCIES = $(am__DEPENDENCIES_1)
@@ -242,7 +243,8 @@ gIDLE_SOURCES = src/main.c src/main.h src/codewidget.c \
 	src/symbols_view.c src/symbols_view.h src/proj_notebook.c \
 	src/proj_notebook.h src/proj_pref_dialog.h \
 	src/proj_pref_dialog.c src/options_dialog.c \
-	src/options_dialog.h
+	src/options_dialog.h src/file_monitor.h src/file_monitor.c \
+	src/file_modify_box.h src/file_modify_box.c
 gIDLE_LDADD = $(DEPS_LIBS) -lpthread
 dist_noinst_SCRIPTS = autogen.sh
 all: all-am
@@ -387,6 +389,10 @@ src/proj_pref_dialog.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/options_dialog.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/file_monitor.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
+src/file_modify_box.$(OBJEXT): src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 gIDLE$(EXEEXT): $(gIDLE_OBJECTS) $(gIDLE_DEPENDENCIES) $(EXTRA_gIDLE_DEPENDENCIES) 
 	@rm -f gIDLE$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(gIDLE_OBJECTS) $(gIDLE_LDADD) $(LIBS)
@@ -400,6 +406,8 @@ mostlyclean-compile:
 	-rm -f src/codewidget.$(OBJEXT)
 	-rm -f src/codewidget_parser.$(OBJEXT)
 	-rm -f src/core_funcs.$(OBJEXT)
+	-rm -f src/file_modify_box.$(OBJEXT)
+	-rm -f src/file_monitor.$(OBJEXT)
 	-rm -f src/find_dialog.$(OBJEXT)
 	-rm -f src/find_replace_dialog.$(OBJEXT)
 	-rm -f src/go_to_line_dialog.$(OBJEXT)
@@ -434,6 +442,8 @@ include src/$(DEPDIR)/code_folding_widget.Po
 include src/$(DEPDIR)/codewidget.Po
 include src/$(DEPDIR)/codewidget_parser.Po
 include src/$(DEPDIR)/core_funcs.Po
+include src/$(DEPDIR)/file_modify_box.Po
+include src/$(DEPDIR)/file_monitor.Po
 include src/$(DEPDIR)/find_dialog.Po
 include src/$(DEPDIR)/find_replace_dialog.Po
 include src/$(DEPDIR)/go_to_line_dialog.Po

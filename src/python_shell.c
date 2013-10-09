@@ -466,6 +466,93 @@ python_shell_text_view_append_output (gchar *text, gssize len)
     gtk_text_view_scroll_to_iter (GTK_TEXT_VIEW (python_shell_source_view), &iter, 0.0, FALSE, 0, 0);
 }
 
+static gboolean
+send_signal_to_child (int sig)
+{
+    GFile *proc = g_file_new_for_path ("/proc");
+    GFileEnumerator *enumerator = g_file_enumerate_children (proc, 
+                                                             G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                                             G_FILE_QUERY_INFO_NONE,
+                                                             NULL, NULL);    
+    GFileInfo *folder_info;
+    GError *error = NULL;
+    int pid;
+    while (enumerator && 
+           (folder_info = g_file_enumerator_next_file (enumerator, NULL, &error)))
+    {
+        /* Enumerate through /proc and find the process */
+        /* whose PPID is the pid of terminal */
+        const gchar *name = g_file_info_get_name (folder_info);
+        if (g_strtod (name, NULL) <= python_shell_data->pid)
+        {
+            g_object_unref (folder_info);
+            continue;
+        }
+
+        GFile *proc_child = g_file_get_child (proc, name);
+        GFile *status_file = g_file_get_child (proc_child, "status");
+        gchar *status_path;
+        gchar *contents;
+        gsize readed = -1;
+        if (!status_file)
+        {
+            g_object_unref (proc_child);
+            g_object_unref (folder_info);
+            continue;
+        }
+        
+        if (g_file_load_contents (status_file, NULL, &contents, 
+                                  &readed, NULL, NULL))
+        {
+            gchar *ppid = g_strstr_len (contents, -1, "PPid:");
+            if (ppid)
+            {
+                GString *g_ppid = g_string_new("");
+                ppid += strlen ("PPid:");
+                ppid--;
+                while (*(++ppid) != '\n')
+                {
+                    if (isdigit (*ppid))
+                        g_string_append_c (g_ppid, *ppid);
+                }
+                
+                if (g_strtod (g_ppid->str, NULL) == python_shell_data->pid)
+                {
+                    /* Found the process with PPID equal to PID of Terminal */
+                    gchar *str_pid = g_strstr_len (contents, -1, "Pid:");
+                    g_ppid = g_string_erase (g_ppid, 0, -1);
+                    if (str_pid)
+                    {
+                        str_pid += strlen ("Pid:");
+                        str_pid--;
+                        while (*(++str_pid) != '\n')
+                        {
+                            if (isdigit (*str_pid))
+                                g_string_append_c (g_ppid, *str_pid);
+                        }
+
+                    pid = g_strtod (g_ppid->str, NULL);
+                    /* Kill the process */
+                    kill (pid, sig);
+
+                    /* Wait for the python to terminate */
+                    int status;
+                    waitpid (pid, &status, 0);
+                    }
+                }
+                g_string_free (g_ppid, TRUE);
+            }                      
+        }
+
+        g_object_unref (status_file);
+        g_object_unref (proc_child);
+        g_object_unref (folder_info);
+    }
+
+    g_object_unref (proc);
+    return TRUE;
+}
+
 /* Handler of "key-press-event"
  * for python_shell_source_view
  */
@@ -510,6 +597,11 @@ python_shell_text_view_key_press_event (GtkWidget *widget, GdkEvent *event)
             write (python_shell_data->master_fd, "\n", 1);
             return FALSE;
         }
+        return TRUE;
+    }
+    else if (event->key.keyval == 99 && event->key.state == 4)
+    {
+        send_signal_to_child (SIGINT);
         return TRUE;
     }
 

@@ -72,4 +72,6 @@ toolbar_inc_indent_clicked (GtkWidget *widget);
 void
 toolbar_dec_indent_clicked (GtkWidget *widget);
 
+void
+toolbar_run (GtkWidget *widget);
 #endif /*TOOLBAR_H*/

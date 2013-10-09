@@ -10,6 +10,9 @@ gchar *
 g_file_input_stream_read_line (GFileInputStream *istream);
 
 int
+count_str_str (char *str1, int len, char *str2);
+
+int
 get_current_index ();
 
 int

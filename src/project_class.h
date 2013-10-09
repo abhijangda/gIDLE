@@ -37,4 +37,7 @@ project_create_files_and_dirs (Project *proj, GError **error);
 void
 project_destroy (Project *);
 
+gchar *
+project_get_main_file (Project *proj);
+
 #endif /*PROJECT_CLASS_H*/

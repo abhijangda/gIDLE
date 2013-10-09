@@ -64,6 +64,10 @@
 <file>/media/sda11/C/GTK+/gIDLE3/src/proj_pref_dialog.h</file>
 <file>/media/sda11/C/GTK+/gIDLE3/src/options_dialog.c</file>
 <file>/media/sda11/C/GTK+/gIDLE3/src/options_dialog.h</file>
+<file>/media/sda11/C/GTK+/gIDLE3/src/file_monitor.h</file>
+<file>/media/sda11/C/GTK+/gIDLE3/src/file_monitor.c</file>
+<file>/media/sda11/C/GTK+/gIDLE3/src/file_modify_box.c</file>
+<file>/media/sda11/C/GTK+/gIDLE3/src/file_modify_box.h</file>
 <compile_only>False</compile_only>
 <disable_inline>False</disable_inline>
 <define_symbols>False</define_symbols>

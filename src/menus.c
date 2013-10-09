@@ -23,6 +23,8 @@ extern GtkWidget *status_bar;
 extern ChildProcessData *python_shell_data;
 extern GtkWidget *python_shell_win;
 extern gIDLEOptions options;
+extern int mode;
+extern FileMonitor *file_monitor;
 
 void
 file_new_activate (GtkWidget *widget)
@@ -1352,6 +1354,37 @@ navigate_go_to_line_activate  (GtkWidget *widget)
     load_go_to_line_dialog (GTK_TEXT_VIEW(code_widget_array [get_current_index ()]->sourceview));
 }
 
+void
+navigate_go_to_next_func_activate (GtkWidget *widget)
+{
+    CodeWidget *codewidget = code_widget_array [get_current_index ()];
+    int class = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->class_combobox));
+    int func = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->func_combobox));
+    
+    if (func == -1 || class == -1)
+        return;
+
+    if (!codewidget->py_class_array [class]->py_func_array [func+1])
+        return;
+    
+    go_to_pos_and_select_line (GTK_TEXT_VIEW (codewidget->sourceview),
+                                codewidget->py_class_array [class]->py_func_array [func+1]->pos);
+}
+
+void
+navigate_go_to_prev_func_activate (GtkWidget *widget)
+{
+    CodeWidget *codewidget = code_widget_array [get_current_index ()];
+    int class = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->class_combobox));
+    int func = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->func_combobox));
+    
+    if (func == 0 || func == -1 || class == -1)
+        return;
+
+    go_to_pos_and_select_line (GTK_TEXT_VIEW (codewidget->sourceview),
+                               codewidget->py_class_array [class]->py_func_array [func-1]->pos);
+}
+
 //Project Menu
 void
 project_new_activate (GtkWidget *widget)
@@ -1474,6 +1507,9 @@ python_shell_close_activate (GtkWidget *widget)
 void
 run_run_script_activate (GtkWidget *widget)
 {
+    if (get_current_index () == -1)
+        return;
+
     load_run_script_dialog (code_widget_array [get_current_index ()]->file_path);
 }
 
@@ -1485,6 +1521,12 @@ run_debug_script_activate (GtkWidget *widget)
 void
 run_run_project_activate (GtkWidget *widget)
 {
+    if (!current_project || mode != GIDLE_MODE_PROJECT)
+        return;
+    
+    gchar *main_file = project_get_main_file (current_project);
+    load_run_script_dialog (main_file);
+    g_free (current_project);
 }
 
 void

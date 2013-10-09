@@ -31,6 +31,7 @@ load_options_dlg()
         gtk_builder_get_object (options_dlg_builder, "dialog"));
 
     load_options_from_file ("./options.inf");
+    printf ("%d f\n", options.word_wrap);
     update_dlg ();
     
     g_signal_connect (G_OBJECT (gtk_builder_get_object (options_dlg_builder, "cmdOk")), "clicked", G_CALLBACK (cmd_ok_clicked), NULL);
@@ -55,6 +56,7 @@ update_dlg()
     /*Editor*/
     gtk_font_button_set_font_name (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), options.font_name);
     gtk_font_button_set_show_size (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), options.font_size);
+    printf ("%d\n", options.word_wrap);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_wordwrap")), options.word_wrap);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_curr_line")), options.highlight_curr_line);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_matching_brace")), options.matching_brace);
@@ -381,22 +383,22 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.word_wrap = TRUE;
-        else
             options.word_wrap = FALSE;
+        else
+            options.word_wrap = TRUE;
     }
 
     g_free (value);
 
     value = get_text_between_strings (contents, 
-                                      g_strstr_len(contents, -1, "<curr_line>") + strlen ("<font_name>"), 
+                                      g_strstr_len(contents, -1, "<curr_line>") + strlen ("<curr_line>"), 
                                       g_strstr_len(contents, -1, "</curr_line>") - 1);
     if (value)
     {
-        if (g_strcmp0 (value, 0) == 0)
-            options.highlight_curr_line = TRUE;
-        else
+        if (g_strcmp0 (value, "0") == 0)
             options.highlight_curr_line = FALSE;
+        else
+            options.highlight_curr_line = TRUE;
     }
     
     g_free (value);
@@ -407,9 +409,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.highlight_matching_brace = TRUE;
+            options.highlight_matching_brace = FALSE ;
         else
-            options.highlight_matching_brace = FALSE;
+            options.highlight_matching_brace = TRUE;
     }
     
     /*Indentation Options*/
@@ -419,9 +421,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.indentation = TRUE;
-        else
             options.indentation = FALSE;
+        else
+            options.indentation = TRUE;
     }
     
     value = get_text_between_strings (contents, 
@@ -454,9 +456,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.tab_width = TRUE;
-        else
             options.tab_width = FALSE;
+        else
+            options.tab_width = TRUE;
     }
     
     /*Code Folding*/
@@ -466,9 +468,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.enable_folding = TRUE;
-        else
             options.enable_folding = FALSE;
+        else
+            options.enable_folding = TRUE;
     }
     
     value = get_text_between_strings (contents,
@@ -477,9 +479,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.fold_comments = TRUE;
-        else
             options.fold_comments = FALSE;
+        else
+            options.fold_comments = TRUE;
     }
     
     value = get_text_between_strings (contents,
@@ -488,9 +490,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.fold_classes = TRUE;
-        else
             options.fold_classes = FALSE;
+        else
+            options.fold_classes = TRUE;
     }
     
     value = get_text_between_strings (contents,
@@ -499,9 +501,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.fold_functions = TRUE;
-        else
             options.fold_functions = FALSE;
+        else
+            options.fold_functions = TRUE;
     }
 
     /*Code Completion*/
@@ -511,9 +513,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.completion = TRUE;
-        else
             options.completion = FALSE;
+        else
+            options.completion = TRUE;
     }
     
     value = get_text_between_strings (contents, 
@@ -522,9 +524,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.variable_scoping = TRUE;
-        else
             options.variable_scoping = FALSE;
+        else
+            options.variable_scoping = TRUE;
     }
     
     /*Line Numbers*/
@@ -534,9 +536,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.line_numbers = TRUE;
-        else
             options.line_numbers = FALSE;
+        else
+            options.line_numbers = TRUE;
     }
     
     value = get_text_between_strings (contents, 
@@ -545,9 +547,9 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.line_numbers_font_size = TRUE;
-        else
             options.line_numbers_font_size = FALSE;
+        else
+            options.line_numbers_font_size = TRUE;
     }
     
     /*Syntax Highlighting*/
@@ -557,8 +559,8 @@ load_options_from_file (char *filepath)
     if (value)
     {
         if (g_strcmp0 (value, "0") == 0)
-            options.syntax_highlighting = TRUE;
-        else
             options.syntax_highlighting = FALSE;
+        else
+            options.syntax_highlighting = TRUE;
     }
 }

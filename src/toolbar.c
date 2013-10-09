@@ -153,3 +153,12 @@ toolbar_dec_indent_clicked (GtkWidget *widget)
 {
     format_dec_indent_activate (widget);
 }
+
+void
+toolbar_run (GtkWidget *widget)
+{
+    if (mode == GIDLE_MODE_FILE)
+        run_run_script_activate (widget);
+    else if (mode == GIDLE_MODE_PROJECT)
+        run_run_project_activate (widget);
+}

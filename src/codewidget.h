@@ -24,6 +24,7 @@ struct _codewidget
     GtkWidget *func_combobox;
     GtkWidget *line_num_widget; //For Line Numbers
     GtkWidget *hbox_scroll_line; //HBox for line_num_widget, code_folding_widget and scrollwin
+    GtkWidget *file_modify_box;
     GtkTextTag *invisible_tag;
     GtkSourceBuffer *sourcebuffer;
     CodeFoldingWidget *code_folding_widget;
@@ -71,4 +72,7 @@ check_for_import_module (CodeWidget *codewidget, PyModule **_parent_module, char
 
 void
 codewidget_update_class_funcs (CodeWidget *);
+
+void
+codewidget_show_modified_dialog (CodeWidget *);
 #endif /*CODEWIDGET_H*/

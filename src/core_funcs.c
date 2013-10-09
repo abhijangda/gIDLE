@@ -8,6 +8,19 @@
 #include <ctype.h>
 
 extern GtkWidget *status_bar;
+extern FileMonitor *file_monitor;
+
+int
+count_str_str (char *str1, int len, char *str2)
+{
+    char *p = str1;
+    int count = 0;
+    while ((p = g_strstr_len (p + 1, len, str2)))
+    {
+        count++;}
+    
+    return count;
+}
 
 gboolean
 open_project_from_file (gchar *proj_file)
@@ -266,6 +279,7 @@ open_file_at_index (char *file_path, int index)
     file_name++;
     gtk_notebook_set_tab_label_text (GTK_NOTEBOOK (notebook),
                                     code_widget_array [index]->vbox, file_name);
+    file_monitor_file (file_monitor, file_path);
     g_free (file_str);
     return TRUE;
 }

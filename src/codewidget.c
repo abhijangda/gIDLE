@@ -2,6 +2,7 @@
 #include "core_funcs.h"
 #include "main.h"
 #include "line_iterator.h"
+#include "file_modify_box.h"
 
 #include <string.h>
 
@@ -81,6 +82,9 @@ codewidget_key_release (GtkWidget *, GdkEvent *, gpointer);
 static void
 _codewidget_code_list_row_activated (GtkTreeView *view, GtkTreePath *path,
                              GtkTreeViewColumn *column, gpointer data);
+
+static void
+_codewidget_fm_box_clicked (GtkWidget *, FileModifyBoxResponse response, gpointer data);
 
 static gboolean can_combo_func_activate = TRUE;
 static gboolean can_combo_class_activate = TRUE;
@@ -265,7 +269,7 @@ codewidget_new ()
 
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (codewidget->class_combobox),
                                            ((PyVariable *)py_class)->name);
-    
+
     codewidget->py_variable_array = NULL;
     codewidget->py_variable_array_size = 0;
     
@@ -281,7 +285,8 @@ codewidget_new ()
     regex_class = g_regex_new ("[ \\ \\t]*\\bclass\\b\\s*\\w+\\s*\\(*.*\\)*:", 0, 0, NULL);
     regex_func = g_regex_new ("[ \\ \\t]*def\\s+[\\w\\d_]+\\s*\\(.+\\)\\:", 0, 0, NULL); 
     regex_line = g_regex_new (".+", 0, 0, NULL);
-
+    
+    codewidget->file_modify_box = NULL;
     return codewidget;
 }
 
@@ -1111,6 +1116,20 @@ get_class_funcs_thread_func (GSimpleAsyncResult *res, GObject *object,
     _codewidget_link_child_classes_to_their_parents (codewidget);
 }
 
+static char *
+get_line_from_buffer (GtkTextBuffer *buffer, int *_line)
+{
+    int line = *_line;
+    GString *g_string = g_string_new (gtk_text_buffer_get_line_text (buffer, line, TRUE));
+    while (count_str_str (g_string->str, g_string->len, "(") != count_str_str (g_string->str, g_string->len, ")"))
+    {
+        //printf ("%d %d %s\n", line, count_str_str (g_string->str, "("), g_string->str);
+        line++;
+        g_string_append (g_string, gtk_text_buffer_get_line_text (buffer, line, TRUE));
+    }
+    return g_string->str;
+}
+
 /*This function parses each line. It will detect
  *all the classes and their functions with imported
  *modules. It will import the module and will add it
@@ -1306,7 +1325,7 @@ _codewidget_start_parse_from_line (CodeWidget *codewidget,
             }
             g_match_info_free (match_info_class);
         }
-
+        g_free (line_text);
         line++;
     }
     
@@ -1733,6 +1752,21 @@ codewidget_key_release (GtkWidget *widget, GdkEvent *event, gpointer data)
     return FALSE;
 }
 
+static char *
+get_line_text_from_buffer (GtkTextBuffer *buffer, int *_line)
+{
+    int line = *_line;
+    
+    GString *g_string = g_string_new (gtk_text_buffer_get_line_text (buffer, line, TRUE));
+    while (count_str_str (g_string->str, g_string->len, "(") != count_str_str (g_string->str, g_string->len, ")"))
+    {
+        line++;
+        g_string = g_string_append (g_string, gtk_text_buffer_get_line_text (buffer, line, TRUE));
+    }
+    //printf ("START%sEND\n", g_string->str);
+    return g_string->str;
+}
+
 /*This function will parse the lines of 
  *function of this class.
  */
@@ -1754,7 +1788,7 @@ _codewidget_parse_function (CodeWidget *codewidget, PyClass *klass, PyFunc *func
     codewidget->curr_func_static_var_array = NULL;
     codewidget->curr_func_static_var_array_size = 0;
 
-    GMatchInfo *match_info;
+    GMatchInfo *match_info = NULL;
 
     while (line <= curr_line)
     {
@@ -1781,7 +1815,7 @@ _codewidget_parse_function (CodeWidget *codewidget, PyClass *klass, PyFunc *func
                      py_static_var_destroy (PY_VARIABLE (static_var));
             }
         }
-
+        g_free (line_text);
         line ++;
     }
     g_match_info_free (match_info);
@@ -1947,4 +1981,33 @@ codewidget_key_press (GtkWidget *widget, GdkEvent *event, gpointer data)
     }
 
     return FALSE;
+}
+
+static void
+_codewidget_fm_box_clicked (GtkWidget *widget, FileModifyBoxResponse response, gpointer data)
+{
+    CodeWidget *codewidget = (CodeWidget *)data;
+    gtk_container_remove (GTK_CONTAINER (codewidget->vbox), codewidget->file_modify_box);
+    codewidget->file_modify_box = NULL;
+
+    if (response == FILE_MODIFY_BOX_RESPONSE_YES)
+    {
+        gchar *file_str = get_file_data (codewidget->file_path);
+        //codewidget_set_text (codewidget, file_str);
+        gtk_text_buffer_set_text (GTK_TEXT_BUFFER (codewidget->sourcebuffer), file_str, -1);
+        codewidget_update_class_funcs (codewidget);
+    }
+}
+
+void
+ codewidget_show_modified_dialog (CodeWidget *codewidget)
+{
+    if (codewidget->file_modify_box)
+        return;
+
+    codewidget->file_modify_box = file_modify_box_new ();
+    gtk_box_pack_start (GTK_BOX (codewidget->vbox), codewidget->file_modify_box, FALSE, FALSE, 2);
+    gtk_box_reorder_child (GTK_BOX (codewidget->vbox), codewidget->file_modify_box, 0);
+    g_signal_connect (G_OBJECT (codewidget->file_modify_box), "clicked", G_CALLBACK (_codewidget_fm_box_clicked), codewidget);
+    gtk_widget_show_all (codewidget->vbox);
 }

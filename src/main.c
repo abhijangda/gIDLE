@@ -34,6 +34,10 @@ char *sys_path_string;
 char *python_sys_script_path = "./scripts/path.py";
 
 gIDLEOptions options;
+FileMonitor *file_monitor;
+
+static void 
+file_monitor_changed (GFileMonitor *, GFile *, GFile *, GFileMonitorEvent, gpointer);
 
 int
 main (int argc, char *argv [])
@@ -65,6 +69,8 @@ main (int argc, char *argv [])
     g_free (sys_path_string);
     sys_path_string = _str; 
     
+    file_monitor = file_monitor_new (file_monitor_changed);
+
     /*Setting Main Window*/    
     GtkWidget *navigate_bookmarks;
     builder = gtk_builder_new ();
@@ -240,6 +246,10 @@ main (int argc, char *argv [])
                                    G_CALLBACK (navigate_go_to_block_start_activate), NULL);   
     g_signal_connect (gtk_builder_get_object (builder, "navigate_go_to_func_def"), "activate",
                                    G_CALLBACK (navigate_go_to_func_def_activate), NULL);   
+    g_signal_connect (gtk_builder_get_object (builder, "navigate_go_to_next_func"), "activate",
+                                   G_CALLBACK (navigate_go_to_next_func_activate), NULL);
+    g_signal_connect (gtk_builder_get_object (builder, "navigate_go_to_prev_func"), "activate",
+                                   G_CALLBACK (navigate_go_to_prev_func_activate), NULL);
     
     //For Project Menu
     g_signal_connect (gtk_builder_get_object (builder, "project_new"), "activate",
@@ -345,7 +355,42 @@ main (int argc, char *argv [])
                                    G_CALLBACK (toolbar_inc_indent_clicked), NULL);   
     g_signal_connect (gtk_builder_get_object (builder, "toolbar_dec_indent"), "clicked",
                                    G_CALLBACK (toolbar_dec_indent_clicked), NULL);   
+    
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_next_line"), "clicked",
+                                   G_CALLBACK (navigate_forward_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_prev_line"), "clicked",
+                                   G_CALLBACK (navigate_back_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_add_bookmark"), "clicked",
+                                   G_CALLBACK (naviagate_add_bookmark_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_next_bookmark"), "clicked",
+                                   G_CALLBACK (navigate_next_bookmark_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_prev_bookmark"), "clicked",
+                                   G_CALLBACK (navigate_prev_bookmarks_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_clear_bookmark"), "clicked",
+                                   G_CALLBACK (naviagate_clear_bookmarks_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_run"), "clicked",
+                                   G_CALLBACK (toolbar_run), NULL); 
+    /*g_signal_connect (gtk_builder_get_object (builder, "toolbar_debug"), "clicked",
+                                   G_CALLBACK (toolbar_dec_indent_clicked), NULL); */
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_open_shell"), "clicked",
+                                   G_CALLBACK (python_shell_open_activate), NULL); 
+    g_signal_connect (gtk_builder_get_object (builder, "toolbar_options"), "clicked",
+                                   G_CALLBACK (tools_options_activate), NULL); 
+    
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_add_bookmark")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/bookmarksadd.png",NULL)));
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_next_bookmark")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/bookmarksnext.png",NULL)));
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_prev_bookmark")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/bookmarksprev.png",NULL)));
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_clear_bookmark")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/bookmarksclear.png",NULL)));
 
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_debug")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/debug.png",NULL)));
+
+    gtk_tool_button_set_icon_widget (GTK_TOOL_BUTTON (gtk_builder_get_object (builder, "toolbar_open_shell")),
+                                      gtk_image_new_from_pixbuf(gdk_pixbuf_new_from_file("./icons/python_shell.png",NULL)));
     /*************************/
     
     line_history_menu = gtk_menu_new ();
@@ -458,7 +503,17 @@ delete_event (GtkWidget *widget, GdkEvent *event)
     }
 
     if (not_saved_tabs_array_size == 0)
-        return FALSE;
+    {
+        GtkBuilder *dialog_builder = gtk_builder_new ();
+        gtk_builder_add_from_file (dialog_builder, "./ui/closing_dialog.glade", NULL);
+        GObject *dialog = gtk_builder_get_object (dialog_builder, "dialog");
+        int response = gtk_dialog_run (GTK_DIALOG (dialog));
+        gtk_widget_destroy (GTK_WIDGET (dialog));
+        if (response == 0)
+            return TRUE;
+        else
+            return FALSE;
+    }
     
     /* Creating confirmation dialog */
     GtkWidget *dialog = gtk_dialog_new_with_buttons ("gIDLE",
@@ -655,4 +710,42 @@ apply_changed_option (char *option_name)
     else if(!g_strcmp0 (option_name, "syntax_highlighting"))
     {
     }
+}
+
+static void 
+file_monitor_changed (GFileMonitor *fm, GFile *file, GFile *otherfile, GFileMonitorEvent event, gpointer data)
+{
+    gboolean event_got = FALSE;
+
+    if (G_FILE_MONITOR_EVENT_CHANGED & event)
+        event_got  = TRUE;
+
+    if (G_FILE_MONITOR_EVENT_DELETED & event)
+        event_got  = TRUE;
+
+    if (G_FILE_MONITOR_EVENT_CREATED & event)
+        event_got  = TRUE;
+
+    if (G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED & event)
+        event_got  = TRUE;
+
+    if (G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT & event)
+        event_got  = TRUE;
+
+    if (G_FILE_MONITOR_EVENT_MOVED & event)
+        event_got  = TRUE;
+    
+    if (!event_got)
+        return;
+    
+    int i;
+    gchar *file_path = g_file_get_path (file);
+    for (i = 0; i < code_widget_array_size; i++)
+        if (strcmp (code_widget_array [i]->file_path, file_path) == 0)
+            break;
+        
+    if (i == code_widget_array_size)
+        return;
+
+    codewidget_show_modified_dialog (code_widget_array [i]);    
 }

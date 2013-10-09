@@ -6,6 +6,7 @@
 #include "pty_fork.h"
 #include "project_class.h"
 #include "symbols_view.h"
+#include "file_monitor.h"
 
 #ifndef MAIN_H
 #define MAIN_H

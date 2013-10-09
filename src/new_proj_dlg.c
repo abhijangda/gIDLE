@@ -66,8 +66,9 @@ create_new_project (GtkWindow *parent)
                                      gtk_entry_get_text (GTK_ENTRY (entry_proj_dir)),
                                      gtk_entry_get_text (GTK_ENTRY (entry_version)), 
                                      NULL, NULL);
+
     gtk_widget_destroy (dialog);
-    
+
     g_free (path);
     g_free (proj_file_path);
     return new_proj;
