@@ -33,7 +33,7 @@ GtkWidget *content_paned;
 Project *current_project;
 
 GtkWidget *symbols_view;
-
+GtkWidget *path_browser;
 GtkWidget *proj_notebook;
 
 /***Options****/

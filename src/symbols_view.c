@@ -13,9 +13,14 @@ struct _symbols_view_private
     GtkWidget *label1, *label2, *cmdSearch, *combo_search_in;
     GtkWidget *combo_search;
     GtkTreeModel *filter;
+    
+    GtkWidget *popup_menu;
 };
 
 typedef struct _symbols_view_private SymbolsViewPrivate;
+
+static gboolean
+_tree_view_button_release (GtkWidget *widget, GdkEvent *event, gpointer data);
 
 static void
 symbols_view_class_init (SymbolsViewClass *klass);
@@ -251,6 +256,35 @@ symbols_view_init (SymbolsView *sym_view)
 
     gtk_box_pack_start (GTK_BOX (priv->hbox_search), priv->label1, TRUE, TRUE, 2);
     gtk_box_pack_start (GTK_BOX (priv->hbox_search), priv->combo_search, TRUE, TRUE, 2);
+    
+    priv->popup_menu = gtk_menu_new ();
+    GtkWidget *go_to_line, *go_to_implementation, *open_module;
+
+    go_to_implementation = gtk_menu_item_new_with_label ("Go To Implementation");
+    open_module = gtk_menu_item_new_with_label ("Open Module");
+
+    gtk_menu_shell_append (GTK_MENU_SHELL (priv->popup_menu), go_to_implementation);
+    gtk_menu_shell_append (GTK_MENU_SHELL (priv->popup_menu), open_module);
+
+    gtk_menu_attach_to_widget (GTK_MENU (priv->popup_menu), priv->tree_view, NULL);
+    gtk_widget_show_all (priv->popup_menu);
+    
+    g_signal_connect (G_OBJECT (priv->tree_view), "button-release-event", G_CALLBACK (_tree_view_button_release), sym_view);
+    gtk_widget_set_events (priv->tree_view, GDK_BUTTON_RELEASE_MASK);
+}
+
+static gboolean
+_tree_view_button_release (GtkWidget *widget, GdkEvent *event, gpointer data)
+{
+    if (((GdkEventButton *)event)->button != 3 || ((GdkEventButton *)event)->type != GDK_BUTTON_RELEASE)
+        return FALSE;
+
+    SymbolsView* sym_view = SYMBOLS_VIEW (data);
+    SymbolsViewPrivate *priv = SYMBOLS_VIEW_GET_PRIVATE (sym_view);
+
+    gtk_menu_popup (GTK_MENU (priv->popup_menu), NULL, NULL, NULL, NULL,
+                     ((GdkEventButton *)event)->button, ((GdkEventButton *)event)->time);
+    return TRUE;    
 }
 
 void

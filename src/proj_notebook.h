@@ -43,4 +43,5 @@ GType project_notebook_get_type (void) G_GNUC_CONST;
 GtkWidget *project_notebook_new (void);
 void project_notebook_open_project (ProjectNotebook *proj_notebook, Project *project);
 void project_notebook_clear (ProjectNotebook *proj_notebook);
+void project_notebook_show_tree_views (ProjectNotebook *proj_notebook, gboolean show);
 #endif /*PROJ_NOTEBOOK_H*/

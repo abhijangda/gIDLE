@@ -32,6 +32,28 @@ proj_dir_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *event, gpointer dat
 static gboolean
 proj_tree_view_dbl_clicked (GtkWidget *widget, GdkEvent *event, gpointer data);
 
+void 
+project_notebook_show_tree_views (ProjectNotebook *proj_notebook, gboolean show)
+{
+    ProjectNotebookPrivate *priv = PROJECT_NOTEBOOK_GET_PRIVATE (proj_notebook);
+    if (show)
+    {
+        gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
+                               priv->proj_tree_view_scrollwin,
+                               gtk_label_new ("Project"));
+        gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
+                               priv->proj_dir_tree_view_scrollwin,
+                               gtk_label_new ("Files"));
+    }
+    else
+    {
+        if (gtk_widget_get_parent (priv->proj_tree_view_scrollwin))
+            gtk_notebook_remove_page (GTK_NOTEBOOK (proj_notebook), 1);
+        if (gtk_widget_get_parent (priv->proj_dir_tree_view_scrollwin))
+            gtk_notebook_remove_page (GTK_NOTEBOOK (proj_notebook), 0);
+    }
+}
+
 GType
 project_notebook_get_type (void)
 {

@@ -5,6 +5,7 @@
 #include "py_variable.h"
 #include "core_funcs.h"
 #include "proj_notebook.h"
+#include "path_browser.h"
 
 int mode = -1;
 
@@ -80,11 +81,10 @@ main (int argc, char *argv [])
 
     window = gtk_builder_get_object (builder, "main_window");
     g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-    
-    proj_notebook = gtk_notebook_new ();
-    g_object_ref (proj_notebook);
 
-    /*Settings proj_dir_tree_view*/
+    path_browser = path_browser_new ();
+    g_object_ref (path_browser);
+
     proj_notebook = project_notebook_new ();
     
     /**Setting proj_syms_tree_view**/
@@ -97,6 +97,12 @@ main (int argc, char *argv [])
 
     status_bar = gtk_statusbar_new ();
     g_object_ref (status_bar);
+    
+    gtk_notebook_append_page (GTK_NOTEBOOK (proj_notebook),
+                                   symbols_view, gtk_label_new ("Symbols"));
+    gtk_notebook_append_page (GTK_NOTEBOOK (proj_notebook), 
+                                   path_browser,
+                                   gtk_label_new ("Path Browser"));
 
     navigate_bookmarks = GTK_WIDGET (gtk_builder_get_object (builder,
                                     "navigate_bookmarks"));
@@ -580,36 +586,40 @@ set_mode (int _mode)
 
     gtk_widget_unparent (status_bar);
     mode = _mode;
-    if (gtk_widget_get_parent (notebook))
-        gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (notebook)), notebook);
+    //if (gtk_widget_get_parent (notebook))
+    //    gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (notebook)), notebook);
    
-    if (gtk_widget_get_parent (proj_notebook))
-        gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (proj_notebook)), proj_notebook);
-    
+    //if (gtk_widget_get_parent (proj_notebook))
+    //    gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (proj_notebook)), proj_notebook);
+
     if (!gtk_widget_get_parent (content_paned))
         gtk_box_pack_start (GTK_BOX (content_box), content_paned, TRUE, TRUE, 0);
     
-    if (gtk_notebook_get_n_pages (GTK_NOTEBOOK (proj_notebook)) == 3)
-            gtk_notebook_remove_page (GTK_NOTEBOOK (proj_notebook), 2);
+    if (!gtk_widget_get_parent (proj_notebook))
+        gtk_paned_pack1 (GTK_PANED (content_paned), proj_notebook, FALSE, FALSE);
+
+    //if (gtk_notebook_get_n_pages (GTK_NOTEBOOK (proj_notebook)) == 4)
+    //    project_notebook_show_tree_views (PROJECT_NOTEBOOK (proj_notebook), FALSE);
     
-    if (gtk_widget_get_parent (symbols_view))
-         gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (symbols_view)), symbols_view);
+    //if (gtk_widget_get_parent (symbols_view))
+    //     gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (symbols_view)), symbols_view);
 
     if (_mode == GIDLE_MODE_FILE)
     {
-        gtk_paned_pack1 (GTK_PANED (content_paned), symbols_view, FALSE, FALSE);
+        project_notebook_show_tree_views (PROJECT_NOTEBOOK (proj_notebook), FALSE);
         gtk_paned_pack2 (GTK_PANED (content_paned), notebook, TRUE, TRUE);
     }
     else
     {
-        gtk_notebook_append_page (GTK_NOTEBOOK (proj_notebook), symbols_view, gtk_label_new ("Symbols"));
-        gtk_paned_pack1 (GTK_PANED (content_paned), proj_notebook, FALSE, FALSE);
+        project_notebook_show_tree_views (PROJECT_NOTEBOOK (proj_notebook), TRUE);        
         gtk_paned_pack2 (GTK_PANED (content_paned), notebook, TRUE, TRUE);
         gtk_widget_set_size_request (proj_notebook, 200, 200);
     }
 
     gtk_box_pack_start (GTK_BOX (content_box), status_bar, FALSE, FALSE, 0);
     gtk_widget_show_all (content_box);
+    
+    path_browser_show_paths (path_browser);
 }
 
 static void
