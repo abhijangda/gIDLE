@@ -48,6 +48,7 @@ struct _opt
     gboolean is_code_folding;
     gboolean show_line_numbers;
     char *python_shell_path;
+    char **env_vars;
     char *font_name;
     int font_size;
     gboolean word_wrap;

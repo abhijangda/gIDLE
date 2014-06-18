@@ -59,13 +59,47 @@ main (int argc, char *argv [])
                    (GIOFunc)read_masterFd, &(python_shell_data->master_fd));
 
     /**********/
-    env_python_path = "/home/abhi/kivy_repo/kivy";
+    
+     /*Loading Options*/
+    if (g_file_test ("./options.inf", G_FILE_TEST_EXISTS))
+        load_options_from_file ("./options.inf");
+    else
+    {
+        options.indent_width = 4;
+        options.tab_width = 4;
+        options.is_code_completion = TRUE;
+        options.is_code_folding = TRUE;
+        options.show_line_numbers = TRUE;
+        options.font_name = "Liberation Mono";
+    }
+    /*************/
+    options.python_shell_path = "/usr/bin/python";
+    options.comment_out_str = "##";
+    options.indent_width_str = "    ";
+    options.tab_width_str = "    ";
+
+    env_python_path = "";
+    gchar **p = options.env_vars;
+    if (p)
+    {
+        while (*p)
+        {
+            gchar *s = g_strstr_len (*p, -1, "PYTHONPATH=");
+            if (s)
+            {
+                env_python_path = s + strlen ("PYTHONPATH=");
+                break;
+            }
+            p++;
+        }
+    }
+
     /*Get sys.path*/
     char *sys_path_argv[] = {"python", "./scripts/path.py", NULL}; 
     g_spawn_sync (NULL, sys_path_argv, NULL, G_SPAWN_SEARCH_PATH,
                                NULL, NULL, &sys_path_string, NULL, NULL, NULL);
     /***********/
-    
+
     char *_str = g_strconcat (sys_path_string, "\n", env_python_path, NULL);
     g_free (sys_path_string);
     sys_path_string = _str; 
@@ -102,7 +136,7 @@ main (int argc, char *argv [])
                                    symbols_view, gtk_label_new ("Symbols"));
     gtk_notebook_append_page (GTK_NOTEBOOK (proj_notebook), 
                                    path_browser,
-                                   gtk_label_new ("Path Browser"));
+                                   gtk_label_new ("Paths"));
 
     navigate_bookmarks = GTK_WIDGET (gtk_builder_get_object (builder,
                                     "navigate_bookmarks"));
@@ -417,19 +451,6 @@ main (int argc, char *argv [])
                       G_CALLBACK (main_window_destroy), NULL);
     /********************************/
     
-    /*Loading Options*/
-    options.indent_width = 4;
-    options.indent_width_str = "    ";
-    options.comment_out_str = "##";
-    options.tab_width = 4;
-    options.tab_width_str = "    ";
-    options.is_code_completion = TRUE;
-    options.is_code_folding = TRUE;
-    options.show_line_numbers = TRUE;
-    options.python_shell_path = "/usr/bin/python";
-    options.font_name = "Liberation Mono";
-    /*************/
-    
     /*Other global variables*/
     search_text = NULL;
     bookmark_array= NULL;
@@ -479,6 +500,8 @@ main (int argc, char *argv [])
     }
     /****************/
 
+    GtkSettings *settings = gtk_settings_get_default ();
+    g_object_set (settings, "gtk-application-prefer-dark-theme", TRUE, NULL);
     gtk_window_maximize (GTK_WINDOW (window));
     gtk_widget_show_all (GTK_WIDGET (window));
     gtk_main ();
@@ -751,7 +774,8 @@ file_monitor_changed (GFileMonitor *fm, GFile *file, GFile *otherfile, GFileMoni
     int i;
     gchar *file_path = g_file_get_path (file);
     for (i = 0; i < code_widget_array_size; i++)
-        if (strcmp (code_widget_array [i]->file_path, file_path) == 0)
+        if (code_widget_array [i]->file_path && 
+             strcmp (code_widget_array [i]->file_path, file_path) == 0)
             break;
         
     if (i == code_widget_array_size)

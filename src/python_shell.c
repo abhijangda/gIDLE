@@ -73,7 +73,18 @@ run_file_in_python_shell (char *filename, gchar *curr_dir, gchar *argv[], gchar 
     /* Run all the commands in one go using "&&" */
     /*Setting Kivy environment variable
      * remove it and move it to options */
-    GString *gstr_argv = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
+    GString *gstr_argv = g_string_new ("");
+    gchar **p = options.env_vars;
+    if (p)
+    {
+        while (*p)
+        {
+            gstr_argv = g_string_append (gstr_argv, "export ");
+            gstr_argv = g_string_append (gstr_argv, *p);
+            gstr_argv = g_string_append (gstr_argv, " && ");
+            p++;
+        }
+    }
  
     /* Setting curr_dir */
     if (curr_dir)
@@ -397,7 +408,18 @@ execute_python_shell (gchar *curr_dir, char *argv[])
     
     /*Setting Kivy environment variable
      * remove it and move it to options */
-    GString *str  = g_string_new ("export PYTHONPATH=/home/abhi/kivy_repo_me/kivy && ");
+    GString *str  = g_string_new ("");
+    gchar **p = options.env_vars;
+    if (p)
+    {
+        while (*p)
+        {
+            str = g_string_append (str, "export ");
+            str = g_string_append (str, *p);
+            str = g_string_append (str, " && ");
+            p++;
+        }
+    }
     str = g_string_append (str, python_shell_data->argv [0]);
 
     /* Running Python Shell with argv */
@@ -412,7 +434,6 @@ execute_python_shell (gchar *curr_dir, char *argv[])
             p++;
         }
     }
-
     write (python_shell_data->master_fd, str->str, str->len);
     write (python_shell_data->master_fd, "\n", 1);
     g_string_free (str, TRUE);
@@ -601,8 +622,11 @@ python_shell_text_view_key_press_event (GtkWidget *widget, GdkEvent *event)
     }
     else if (event->key.keyval == 99 && event->key.state == 4)
     {
-        send_signal_to_child (SIGINT);
-        return TRUE;
+        if (!gtk_text_buffer_get_has_selection (buffer))
+        {
+            send_signal_to_child (SIGINT);
+            return TRUE;
+        }
     }
 
     return FALSE;

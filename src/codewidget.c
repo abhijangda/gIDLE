@@ -287,6 +287,8 @@ codewidget_new ()
     regex_line = g_regex_new (".+", 0, 0, NULL);
     
     codewidget->file_modify_box = NULL;
+    
+    codewidget->show_reload = TRUE;
     return codewidget;
 }
 
@@ -341,8 +343,8 @@ codewidget_line_num_widget_draw (GtkWidget *widget, cairo_t *cr,
                              gpointer data)
 {
     CodeWidget *codewidget = (CodeWidget *)data;
-    
-    if (!options.show_line_numbers)
+
+    if (!options.line_numbers)
          return;
     
     GtkTextBuffer *buffer = GTK_TEXT_BUFFER (codewidget->sourcebuffer);
@@ -1524,7 +1526,6 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
         return;
 
     GMatchInfo *match_info;
-
     gchar *text = line_text + strlen(line_text) - 1;
     for (; text >= line_text; text--)
     {
@@ -1533,13 +1534,13 @@ show_auto_completion (CodeWidget *codewidget, char *line_text, int pos, gboolean
     }
     text++;
 
-    if (dot_entered && !g_strcmp0 (text, "self"))
+    if (dot_entered && (!g_strcmp0 (text, "self") || !g_strcmp0 (text, "self.")))
     {
         /*Found "self."*/
         /*Populate list store*/
-
         int curr_class_index = gtk_combo_box_get_active (GTK_COMBO_BOX (codewidget->class_combobox));
         code_assist_clear (codewidget->code_assist_widget);
+        code_assist_show_matches (codewidget->code_assist_widget, "self.");
         _codewidget_add_class_funcs_to_code_assist (codewidget,
                                                 codewidget->py_class_array [curr_class_index]);
         _codewidget_show_code_list_view (codewidget);
@@ -2002,7 +2003,7 @@ _codewidget_fm_box_clicked (GtkWidget *widget, FileModifyBoxResponse response, g
 void
  codewidget_show_modified_dialog (CodeWidget *codewidget)
 {
-    if (codewidget->file_modify_box)
+    if (codewidget->show_reload || codewidget->file_modify_box)
         return;
 
     codewidget->file_modify_box = file_modify_box_new ();

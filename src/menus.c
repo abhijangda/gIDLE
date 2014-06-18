@@ -195,6 +195,7 @@ file_save_activate (GtkWidget *widget)
     }
     else
     {
+        code_widget_array [get_current_index ()]->show_reload = FALSE;
         GtkTextIter end_iter;
         gtk_text_buffer_get_end_iter (GTK_TEXT_BUFFER (code_widget_array[get_current_index ()]->sourcebuffer),
                                      &end_iter);
@@ -203,10 +204,12 @@ file_save_activate (GtkWidget *widget)
         {
             //Error cannot save
             show_error_message_dialog ("Cannot save file!");
+            code_widget_array [get_current_index ()]->show_reload = FALSE;
             return;
         }
         codewidget_update_class_funcs (code_widget_array[get_current_index ()]);
         gtk_statusbar_push (GTK_STATUSBAR (status_bar), 0, "File Saved");
+        code_widget_array [get_current_index ()]->show_reload = TRUE;
     }
 }
 

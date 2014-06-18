@@ -48,6 +48,7 @@ struct _codewidget
     gboolean thread_ended;
     PyStaticVar **curr_func_static_var_array;
     int curr_func_static_var_array_size;
+    gboolean show_reload;
 };
 
 typedef struct _codewidget CodeWidget;

@@ -38,12 +38,14 @@ project_notebook_show_tree_views (ProjectNotebook *proj_notebook, gboolean show)
     ProjectNotebookPrivate *priv = PROJECT_NOTEBOOK_GET_PRIVATE (proj_notebook);
     if (show)
     {
-        gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
-                               priv->proj_tree_view_scrollwin,
-                               gtk_label_new ("Project"));
-        gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
-                               priv->proj_dir_tree_view_scrollwin,
-                               gtk_label_new ("Files"));
+        if (!gtk_widget_get_parent (priv->proj_tree_view_scrollwin))
+            gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
+                                   priv->proj_tree_view_scrollwin,
+                                   gtk_label_new ("Project"));
+        if (gtk_widget_get_parent (priv->proj_dir_tree_view_scrollwin))
+            gtk_notebook_prepend_page (GTK_NOTEBOOK (proj_notebook), 
+                                   priv->proj_dir_tree_view_scrollwin,
+                                   gtk_label_new ("Files"));
     }
     else
     {

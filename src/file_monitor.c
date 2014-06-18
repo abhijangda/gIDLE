@@ -20,21 +20,19 @@ gboolean file_monitor_file (FileMonitor *fm, gchar *file)
         return FALSE;
     
     fm->file_monitor_array = g_realloc (fm->file_monitor_array, sizeof (GFileMonitor*)*(fm->size + 1));
-    fm->file_path_array = g_realloc (fm->file_path_array, sizeof (GFileMonitor*)*(fm->size + 1));
-    fm->size++;
+    fm->file_path_array = g_realloc (fm->file_path_array, sizeof (gchar*)*(fm->size + 1));
+
     GFileMonitor *gfm = g_file_monitor_file (gfile,
                                              G_FILE_MONITOR_WATCH_MOUNTS,
                                              NULL, NULL);
     if (!gfm)
-    {
-        fm->size --;
         return FALSE;
-    }
     
     fm->file_monitor_array [fm->size] = gfm;
     fm->file_path_array [fm->size] = g_strdup (file);
     g_signal_connect (G_OBJECT (fm->file_monitor_array [fm->size]), "changed",
                       G_CALLBACK (fm->changed_handler), NULL);
+    fm->size++;
     //g_object_unref (gfile);
     return TRUE;
 }
@@ -61,7 +59,7 @@ void file_monitor_cancel (FileMonitor *fm, gchar *file)
         fm->file_path_array [j] = fm->file_path_array [j+1];
     }
     fm->file_monitor_array = g_realloc (fm->file_monitor_array, sizeof (GFileMonitor*) * (fm->size - 1));
-    fm->file_path_array = g_realloc (fm->file_path_array, sizeof (GFileMonitor*) * (fm->size - 1));
+    fm->file_path_array = g_realloc (fm->file_path_array, sizeof (gchar*) * (fm->size - 1));
     fm->size--;
 }
 

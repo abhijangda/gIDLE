@@ -124,7 +124,6 @@ _row_expanded (GtkTreeView *tree_view, GtkTreeIter *iter, GtkTreePath *path, gpo
     {
         gchar *fpath;
         gtk_tree_model_get (GTK_TREE_MODEL (priv->tree_store), &iter1, PATH_BROWSER_COL_NAME, &fpath, -1);
-        printf ("%s\n", fpath);
         file_path_str = g_string_prepend (file_path_str, fpath);
         file_path_str = g_string_prepend_c (file_path_str, '/');
         g_free (fpath);
@@ -160,7 +159,7 @@ _row_collapsed (GtkTreeView *tree_view, GtkTreeIter *iter, GtkTreePath *path, gp
     GtkTreeIter child;
     while (gtk_tree_model_iter_children (GTK_TREE_MODEL (priv->tree_store), &child, iter))
         gtk_tree_store_remove (priv->tree_store, &child);
-    
+
     gtk_tree_store_append (priv->tree_store, &child, iter);
 }
 

@@ -5,6 +5,8 @@
 
 static GtkBuilder *options_dlg_builder;
 extern gIDLEOptions options;
+static GtkWidget *treeview_envs;
+static GtkTreeModel *treemodel_envs;
 
 void
 load_options_from_file (char *filepath);
@@ -16,11 +18,26 @@ void
 cmd_ok_clicked (GtkWidget *widget);
 
 void
+cmd_add_clicked (GtkWidget *widget);
+
+void
+cmd_remove_clicked (GtkWidget *widget);
+
+void
 apply_options ();
 
 void
 save_options_to_file (char *);
 
+void env_var_edited (GtkCellRendererText *cell,
+                           gchar               *path_string,
+                           gchar               *new_text,
+                           gpointer             user_data)
+{
+    GtkTreeIter iter;
+    if (gtk_tree_model_get_iter_from_string (treemodel_envs, &iter, path_string))
+        gtk_list_store_set (GTK_LIST_STORE (treemodel_envs), &iter, 0, new_text, -1);
+}
 void
 load_options_dlg()
 {
@@ -29,12 +46,34 @@ load_options_dlg()
 
     GtkWidget *dialog = GTK_WIDGET (
         gtk_builder_get_object (options_dlg_builder, "dialog"));
+    
+    treeview_envs = GTK_WIDGET (gtk_builder_get_object (options_dlg_builder, "treeview_envs"));
+    treemodel_envs = GTK_TREE_MODEL (gtk_list_store_new (1, G_TYPE_STRING));
+     
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
+    g_object_set (GTK_CELL_RENDERER_TEXT (renderer), "editable", TRUE, NULL);
+    //g_object_set (GTK_CELL_RENDERER_TEXT (renderer), "mode", GTK_CELL_RENDERER_MODE_EDITABLE);
+    g_signal_connect (G_OBJECT (renderer), "edited", G_CALLBACK (env_var_edited), NULL);
+
+    GtkTreeViewColumn *column = gtk_tree_view_column_new ();   
+    gtk_tree_view_column_pack_start (column, renderer, TRUE);
+    gtk_tree_view_column_set_attributes (column, renderer, "text", 0, NULL);
+    
+    gtk_tree_view_set_model (GTK_TREE_VIEW (treeview_envs),
+                              GTK_TREE_MODEL (treemodel_envs));
+    gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (treeview_envs),
+                                        FALSE);
+    
+    gtk_tree_view_append_column (GTK_TREE_VIEW (treeview_envs), column);
 
     load_options_from_file ("./options.inf");
-    printf ("%d f\n", options.word_wrap);
     update_dlg ();
     
     g_signal_connect (G_OBJECT (gtk_builder_get_object (options_dlg_builder, "cmdOk")), "clicked", G_CALLBACK (cmd_ok_clicked), NULL);
+
+    g_signal_connect (G_OBJECT (gtk_builder_get_object (options_dlg_builder, "cmdAdd")), "clicked", G_CALLBACK (cmd_add_clicked), NULL);
+    g_signal_connect (G_OBJECT (gtk_builder_get_object (options_dlg_builder, "cmdRemove")), "clicked", G_CALLBACK (cmd_remove_clicked), NULL);
+    
     gtk_font_button_set_show_style (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), FALSE);
     gtk_font_button_set_show_size (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), FALSE);
     gtk_widget_set_size_request (dialog, 400, 300);
@@ -51,12 +90,28 @@ cmd_ok_clicked (GtkWidget *widget)
 }
 
 void
+cmd_add_clicked (GtkWidget *widget)
+{
+    GtkTreeIter iter;
+    gtk_list_store_append (GTK_LIST_STORE (treemodel_envs), &iter);
+    gtk_tree_selection_select_iter (gtk_tree_view_get_selection (GTK_TREE_VIEW (treeview_envs)), &iter);
+}
+
+void
+cmd_remove_clicked (GtkWidget *widget)
+{
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (treeview_envs));
+    GtkTreeIter iter;
+    if (gtk_tree_selection_get_selected (selection, &treemodel_envs, &iter))
+        gtk_list_store_remove (GTK_LIST_STORE (treemodel_envs), &iter);
+}
+
+void
 update_dlg()
 {
     /*Editor*/
     gtk_font_button_set_font_name (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), options.font_name);
     gtk_font_button_set_show_size (GTK_FONT_BUTTON (gtk_builder_get_object (options_dlg_builder, "fontbutton")), options.font_size);
-    printf ("%d\n", options.word_wrap);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_wordwrap")), options.word_wrap);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_curr_line")), options.highlight_curr_line);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_matching_brace")), options.matching_brace);
@@ -66,7 +121,7 @@ update_dlg()
     gtk_spin_button_set_value (GTK_SPIN_BUTTON (gtk_builder_get_object (options_dlg_builder, "spin_indent_width")), options.indent_width);
     gtk_entry_set_text (GTK_ENTRY (gtk_builder_get_object (options_dlg_builder, "entry_inc_indent_syms")), options.inc_indent_syms);
     gtk_entry_set_text (GTK_ENTRY (gtk_builder_get_object (options_dlg_builder, "entry_dec_indent_syms")), options.dec_indent_syms);
-    gtk_spin_button_set_value (GTK_SPIN_BUTTON (gtk_builder_get_object (options_dlg_builder, "spin_tab_width")), options.tab_width);
+    //gtk_spin_button_set_value (GTK_SPIN_BUTTON (gtk_builder_get_object (options_dlg_builder, "spin_tab_width")), options.tab_width);
 
     /*Code Folding*/
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_code_folding")), options.code_folding);
@@ -84,6 +139,16 @@ update_dlg()
     
     /*Syntax Highlighting*/
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (gtk_builder_get_object (options_dlg_builder, "chk_syntax_highlighting")), options.syntax_highlighting);
+    
+    /*Python Shell*/
+    GtkTreeIter iter;
+    gchar **p = options.env_vars;
+    while (*p)
+    {
+        gtk_list_store_append (GTK_LIST_STORE (treemodel_envs), &iter);
+        gtk_list_store_set 	(GTK_LIST_STORE (treemodel_envs), &iter, 0, *p, -1);
+        p++;
+    }
 }
 
 void
@@ -230,6 +295,32 @@ apply_options ()
         options.syntax_highlighting = new_int_value;
         apply_changed_option ("syntax_highlighting");
     }
+    
+    /*Python Shell*/
+    GtkTreeIter iter;
+    g_strfreev (options.env_vars);
+    options.env_vars = NULL;
+    if (gtk_tree_model_get_iter_first (treemodel_envs, &iter))
+    {
+        int size = 1;
+        do 
+        {
+            gchar *var;
+            gtk_tree_model_get (treemodel_envs, &iter, 0, &var, -1);
+            options.env_vars = g_realloc (options.env_vars, sizeof (gchar *)*(size));
+            options.env_vars [size - 1] = var;
+            size++;
+        }
+        while (gtk_tree_model_iter_next (treemodel_envs, &iter));
+        options.env_vars = g_realloc (options.env_vars, sizeof (gchar *)*(size));
+        options.env_vars [size - 1] = NULL;
+        gchar **p = options.env_vars;
+        while (*p)
+        {
+            printf ("%s\n", *p);
+            p++;
+        }
+    }
 }
 
 void
@@ -352,6 +443,18 @@ save_options_to_file (char *filepath)
     g_free (str_value);
     g_string_append(contents, "</syntax_highlighting>\n");
     
+    /*Python Shell*/
+    g_string_append(contents, "<env_vars>");    
+    gchar **p = options.env_vars;
+    while (*(p+1))
+    {
+        g_string_append (contents, *p);
+        g_string_append (contents, "\n");
+        p++;
+    }
+    g_string_append (contents, *p);
+    g_string_append(contents, "</env_vars>\n");
+
     set_file_data (filepath, contents->str, contents->len);
     g_string_free (contents, TRUE);
 }
@@ -539,6 +642,8 @@ load_options_from_file (char *filepath)
             options.line_numbers = FALSE;
         else
             options.line_numbers = TRUE;
+        
+        printf ("line%d\n", options.line_numbers);
     }
     
     value = get_text_between_strings (contents, 
@@ -562,5 +667,15 @@ load_options_from_file (char *filepath)
             options.syntax_highlighting = FALSE;
         else
             options.syntax_highlighting = TRUE;
+    }
+
+    /*Python Shell*/
+    value = get_text_between_strings (contents,
+                                      g_strstr_len(contents, -1, "<env_vars>") + strlen ("<env_vars>"),
+                                      g_strstr_len(contents, -1, "</env_vars>") - 1);
+
+    if (value)
+    {
+        options.env_vars = g_strsplit (value, "\n", 0);
     }
 }
